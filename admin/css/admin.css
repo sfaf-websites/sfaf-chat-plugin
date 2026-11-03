@@ -1,0 +1,76 @@
+/* SFAF Chat admin screens. The dashboard rules carry over from the standalone
+   dashboard, scoped under .sfaf-chat-dash so nothing leaks into wp-admin. */
+
+/* Settings and Pinned Answers */
+.sfaf-chat-admin h2 { margin-top: 2em; }
+.sfaf-chat-modes label { display: block; margin: 0 0 10px; }
+.sfaf-chat-confirm { background: #fff; border-left: 4px solid #dba617; padding: 8px 12px; max-width: 760px; }
+.sfaf-chat-status { max-width: 760px; }
+.sfaf-chat-status th { width: 220px; font-weight: 600; }
+.sfaf-chat-explain { background: #fff; border: 1px solid #c3c4c7; padding: 4px 16px 8px; max-width: 860px; margin-top: 12px; }
+.sfaf-chat-explain h2 { margin-top: 12px; }
+.sfaf-chat-explain ul { list-style: disc; padding-left: 20px; }
+.sfaf-chat-test { display: flex; gap: 8px; max-width: 760px; }
+.sfaf-chat-triggers { white-space: pre-wrap; display: block; background: none; padding: 0; }
+
+/* Dashboard */
+.sfaf-chat-dash {
+  --surface: #fcfcfb; --border: #dde2e5;
+  --text: #14181b; --text-2: #3e4a52; --muted: #5b6670;
+  --grid: #e6eaec; --bar: #0098ad; --bar-hover: #00778a;
+  --warn-bg: #fff4e5; --warn-border: #e8b86a;
+  max-width: 1080px; color: var(--text); font-size: 14px; line-height: 1.45;
+}
+.sfaf-chat-dash .dash-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 12px 0 16px; }
+.sfaf-chat-dash h1 { padding: 0; margin: 0; }
+.sfaf-chat-dash h2 { font-size: 16px; margin: 0 0 4px; }
+.sfaf-chat-dash .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+.sfaf-chat-dash .ranges { display: flex; gap: 6px; }
+.sfaf-chat-dash .ranges a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2); text-decoration: none; background: var(--surface); }
+.sfaf-chat-dash .ranges a[aria-current="page"] { background: var(--text); color: var(--surface); border-color: var(--text); }
+.sfaf-chat-dash .banner { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; }
+.sfaf-chat-dash .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.sfaf-chat-dash .tile, .sfaf-chat-dash .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-width: none; }
+.sfaf-chat-dash .tile { padding: 14px 16px; }
+.sfaf-chat-dash .tile .n { font-size: 28px; line-height: 1.2; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sfaf-chat-dash .tile .l { color: var(--muted); font-size: 13px; }
+.sfaf-chat-dash .card { padding: 18px; margin: 0 0 16px; }
+.sfaf-chat-dash .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+
+/* Topic frequency: ranked horizontal bars, single series (no legend). */
+.sfaf-chat-dash .hbars { display: grid; grid-template-columns: minmax(110px, max-content) 1fr; gap: 2px 12px; align-items: center; }
+.sfaf-chat-dash .hbars .lab { color: var(--text-2); text-align: right; white-space: nowrap; }
+.sfaf-chat-dash .hbars .track { display: flex; align-items: center; gap: 8px; height: 22px; }
+.sfaf-chat-dash .hbars .bar { height: 16px; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
+.sfaf-chat-dash .hbars .val { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sfaf-chat-dash .hbars .track:hover .bar { background: var(--bar-hover); }
+
+/* By hour: 24 columns, baseline-anchored, hover tooltip per bar. */
+.sfaf-chat-dash .vchart { position: relative; padding-left: 34px; }
+.sfaf-chat-dash .plot { position: relative; height: 180px; display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; align-items: end; border-bottom: 1px solid var(--muted); }
+.sfaf-chat-dash .gridline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); pointer-events: none; }
+.sfaf-chat-dash .gridline span { position: absolute; left: -34px; top: -9px; width: 28px; text-align: right; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sfaf-chat-dash .col { position: relative; height: 100%; display: flex; align-items: flex-end; cursor: default; outline: none; }
+.sfaf-chat-dash .col::before { content: ""; position: absolute; inset: 0; }
+.sfaf-chat-dash .col .bar { width: 100%; background: var(--bar); border-radius: 4px 4px 0 0; min-height: 0; }
+.sfaf-chat-dash .col:hover .bar, .sfaf-chat-dash .col:focus .bar { background: var(--bar-hover); }
+.sfaf-chat-dash .col .tip { display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--text); color: var(--surface); font-size: 12px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; z-index: 2; pointer-events: none; }
+.sfaf-chat-dash .col:hover .tip, .sfaf-chat-dash .col:focus .tip { display: block; }
+.sfaf-chat-dash .xaxis { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; margin-top: 4px; }
+.sfaf-chat-dash .xaxis span { font-size: 11px; color: var(--muted); text-align: center; }
+
+.sfaf-chat-dash details { margin-top: 12px; }
+.sfaf-chat-dash summary { cursor: pointer; color: var(--text-2); }
+.sfaf-chat-dash table { border-collapse: collapse; width: 100%; }
+.sfaf-chat-dash th, .sfaf-chat-dash td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+.sfaf-chat-dash th { color: var(--muted); font-weight: 600; font-size: 13px; }
+.sfaf-chat-dash td.when { white-space: nowrap; }
+.sfaf-chat-dash .hourtable { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0 16px; margin-top: 8px; }
+.sfaf-chat-dash .hourtable div { display: flex; justify-content: space-between; border-bottom: 1px solid var(--grid); padding: 4px 0; }
+.sfaf-chat-dash .q { color: var(--text); }
+.sfaf-chat-dash .nq { color: var(--muted); font-style: italic; }
+
+@media (max-width: 560px) {
+  .sfaf-chat-dash .xaxis span:nth-child(odd) { visibility: hidden; }
+  .sfaf-chat-dash .hbars { grid-template-columns: minmax(90px, max-content) 1fr; }
+}
