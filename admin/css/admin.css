@@ -13,6 +13,60 @@
 .sfaf-chat-test { display: flex; gap: 8px; max-width: 760px; }
 .sfaf-chat-triggers { white-space: pre-wrap; display: block; background: none; padding: 0; }
 
+/* Tabs and grouped forms */
+.sfaf-chat-tabs { margin-bottom: 16px; }
+.sfaf-chat-group { border: 1px solid #c3c4c7; background: #fff; padding: 8px 16px 14px; margin: 0 0 14px; }
+.sfaf-chat-group legend { font-weight: 600; padding: 0 6px; }
+.sfaf-chat-stack { display: block; margin: 0 0 8px; }
+.sfaf-chat-stack-label { font-weight: 600; margin: 10px 0 6px; }
+
+/* Appearance */
+.sfaf-chat-split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; max-width: 1180px; align-items: start; }
+.sfaf-chat-side { position: sticky; top: 46px; }
+.sfaf-chat-colors { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px 20px; }
+.sfaf-chat-color label { display: block; font-weight: 500; margin-bottom: 4px; }
+.sfaf-chat-color-row { display: flex; gap: 6px; align-items: center; }
+.sfaf-chat-color-row input[type="color"] { width: 38px; height: 30px; padding: 0; border: 1px solid #8c8f94; background: #fff; cursor: pointer; }
+.sfaf-chat-color-row input[type="text"] { width: 96px; }
+.sfaf-chat-color .description { margin-top: 3px; font-size: 12px; }
+.sfaf-chat-contrast { margin: 12px 0; padding: 4px 12px; background: #fcf0f1; border-left: 4px solid #d63638; }
+.sfaf-chat-contrast.is-ok { background: #edfaef; border-left-color: #00a32a; }
+.sfaf-chat-contrast ul { list-style: disc; padding-left: 18px; margin: 0 0 8px; }
+
+/* The preview copies the widget's look with the same variables, prefixed --p-. */
+.sfaf-chat-preview { font-family: var(--p-font); font-size: 13px; line-height: 1.45; padding: 14px; background: #e4e3df; }
+.sfaf-chat-preview .p-panel { background: var(--p-surface); border-radius: var(--p-radius); overflow: hidden; box-shadow: 0 8px 24px rgba(35,33,32,.22); }
+.sfaf-chat-preview .p-header { display: flex; justify-content: space-between; align-items: center; background: var(--p-dark); color: var(--p-on-dark); border-top: 3px solid var(--p-accent); padding: 9px 12px; font-weight: 600; font-size: 14px; }
+.sfaf-chat-preview .p-read { font-size: 11px; font-weight: 500; }
+.sfaf-chat-preview .p-log { display: flex; flex-direction: column; gap: 7px; padding: 12px; background: var(--p-surface-warm); }
+.sfaf-chat-preview .p-bubble { max-width: 84%; padding: 7px 10px; border-radius: var(--p-radius); }
+.sfaf-chat-preview .p-bot { align-self: flex-start; background: var(--p-bot-bg); color: var(--p-bot-text); border: 1px solid var(--p-border); }
+.sfaf-chat-preview .p-user { align-self: flex-end; background: var(--p-user-bg); color: var(--p-user-text); }
+.sfaf-chat-preview .p-chip { align-self: flex-start; color: var(--p-text); border: 1px solid var(--p-border); border-radius: var(--p-radius); padding: 5px 9px; }
+.sfaf-chat-preview .p-link { align-self: flex-start; background: var(--p-accent); color: var(--p-on-accent); border-radius: var(--p-radius); padding: 5px 10px; font-weight: 600; }
+.sfaf-chat-preview .p-form { display: flex; gap: 6px; padding: 9px 12px 6px; border-top: 1px solid var(--p-border); }
+.sfaf-chat-preview .p-input { flex: 1; color: var(--p-muted); border: 1px solid var(--p-border); border-radius: var(--p-radius); padding: 5px 8px; }
+.sfaf-chat-preview .p-send { background: var(--p-accent); color: var(--p-on-accent); border-radius: var(--p-radius); padding: 5px 10px; font-weight: 700; }
+.sfaf-chat-preview .p-foot { color: var(--p-muted); font-size: 11px; text-align: center; padding: 0 12px 8px; }
+.sfaf-chat-preview .p-dock { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+.sfaf-chat-preview .p-launcher { background: var(--p-dark); color: var(--p-on-dark); border-left: 3px solid var(--p-accent); border-radius: var(--p-radius); padding: 5px 10px; font-size: 12px; font-weight: 600; }
+.sfaf-chat-preview .p-weglot { background: #fff; color: #000; border: 1px solid #e0e0e0; padding: 5px 16px; font-size: 12px; }
+
+/* Suggested questions */
+.sfaf-chat-set { background: #fff; border: 1px solid #c3c4c7; padding: 12px 16px; margin: 0 0 12px; max-width: 860px; }
+.sfaf-chat-set-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; justify-content: space-between; margin-bottom: 10px; }
+.sfaf-chat-set-head label { font-weight: 600; }
+.sfaf-chat-set-head input { display: block; margin-top: 4px; font-weight: 400; }
+.sfaf-chat-set-actions { display: flex; gap: 6px; align-items: center; }
+.sfaf-chat-questions { margin: 0 0 4px 20px; }
+.sfaf-chat-questions li { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.sfaf-chat-questions input { flex: 1; min-width: 0; }
+
+@media (max-width: 1100px) {
+  .sfaf-chat-split { grid-template-columns: minmax(0, 1fr); }
+  .sfaf-chat-side { position: static; max-width: 420px; }
+}
+
 /* Dashboard */
 .sfaf-chat-dash {
   --surface: #fcfcfb; --border: #dde2e5;

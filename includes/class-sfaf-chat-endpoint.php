@@ -3,6 +3,7 @@
  * The REST routes: asking a question, the stable widget script, and the indexer.
  *
  *   POST /wp-json/sfaf-chat/v1/ask        { question, history?, scope? }
+ *   POST /wp-json/sfaf-chat/v1/starters   { url }, the starter questions for a page
  *   GET  /wp-json/sfaf-chat/v1/widget.js  the one URL the sfaf.org script tag uses
  *   GET  /wp-json/sfaf-chat/v1/index      token required, see SFAF_Chat_Indexer
  *
@@ -77,6 +78,11 @@ class SFAF_Chat_Endpoint {
             'callback'            => array( $this, 'ask' ),
             'permission_callback' => '__return_true',
         ) );
+        register_rest_route( self::REST_NAMESPACE, '/starters', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'starters' ),
+            'permission_callback' => '__return_true',
+        ) );
         register_rest_route( self::REST_NAMESPACE, '/widget\.js', array(
             'methods'             => 'GET',
             'callback'            => array( $this, 'widget_placeholder' ),
@@ -139,10 +145,11 @@ class SFAF_Chat_Endpoint {
         header( 'X-LiteSpeed-Cache-Control: no-cache' );
         do_action( 'litespeed_control_set_nocache', 'sfaf-chat' );
 
-        $is_ask    = '/' . self::REST_NAMESPACE . '/ask' === $route;
+        // The two routes the widget calls from another site. Both get the CORS rules.
+        $is_called = in_array( $route, array( '/' . self::REST_NAMESPACE . '/ask', '/' . self::REST_NAMESPACE . '/starters' ), true );
         $is_widget = '/' . self::REST_NAMESPACE . '/widget.js' === $route;
 
-        if ( $is_ask ) {
+        if ( $is_called ) {
             $origin = get_http_origin();
             if ( self::origin_allowed( $origin ) ) {
                 header( 'Access-Control-Allow-Origin: ' . $origin );
@@ -170,6 +177,28 @@ class SFAF_Chat_Endpoint {
     /** The real body is written by finish(). This only gives the route a handler. */
     public function widget_placeholder() {
         return new WP_REST_Response( null, 200 );
+    }
+
+    /* =============================== STARTERS ============================= */
+
+    /**
+     * The starter questions for a page. Held to the same switch and origin rules as
+     * ask, so "off" still means off. POST, not GET, so the page address stays out of
+     * access logs, where it would sit next to an IP address. Nothing is logged here
+     * and no model is called.
+     */
+    public function starters( WP_REST_Request $request ) {
+        if ( ! SFAF_Chat_Settings::mode_allows_ask() ) {
+            return $this->fail( 'The assistant is not available.', 403 );
+        }
+        if ( ! self::origin_allowed( get_http_origin() ) ) {
+            return $this->fail( 'Forbidden', 403 );
+        }
+
+        $body = json_decode( (string) $request->get_body(), true );
+        $set  = SFAF_Chat_Starters::for_url( is_array( $body ) ? ( $body['url'] ?? '' ) : '' );
+
+        return new WP_REST_Response( array( 'ok' => true, 'questions' => $set['questions'] ), 200 );
     }
 
     /* ================================== ASK =============================== */
@@ -244,6 +273,8 @@ class SFAF_Chat_Endpoint {
             $role = ( (string) ( $msg['role'] ?? '' ) === 'assistant' ) ? 'model' : 'user';
             if ( 'user' === $role ) {
                 $user_turns[] = $text;
+            } else {
+                $text = SFAF_Chat_Core::no_em_dash( $text );
             }
 
             $contents[] = array( 'role' => $role, 'parts' => array( array( 'text' => $text ) ) );
@@ -349,7 +380,7 @@ class SFAF_Chat_Endpoint {
                 }
             }
             $out['content'] = $text;
-            return $out;
+            return array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), $out );
         };
 
         $enc   = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
@@ -559,7 +590,7 @@ class SFAF_Chat_Endpoint {
     /** Plain link button: {label, url}. */
     private static function link_for( array $r ) {
         return array(
-            'label' => (string) ( $r['title'] ?? $r['id'] ),
+            'label' => SFAF_Chat_Core::no_em_dash( $r['title'] ?? $r['id'] ),
             'url'   => (string) $r['url'],
         );
     }
@@ -590,9 +621,11 @@ class SFAF_Chat_Endpoint {
             }
         }
 
+        $subtitle = SFAF_Chat_Core::no_em_dash( $subtitle );
+
         return array(
             'type'      => 'event' === $type ? 'event' : 'article',
-            'title'     => (string) ( ( $og['title'] ?? null ) ?: ( $r['title'] ?? '' ) ),
+            'title'     => SFAF_Chat_Core::no_em_dash( ( $og['title'] ?? null ) ?: ( $r['title'] ?? '' ) ),
             'subtitle'  => '' !== $subtitle ? $subtitle : null,
             // SFAF domains only (sfaf.org, *.sfaf.org, tweaker.org), else no image.
             'image_url' => SFAF_Chat_Core::is_sfaf_url( $image ) ? $image : null,

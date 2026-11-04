@@ -1,6 +1,8 @@
 <?php
 /**
- * The wp-admin screens: Settings and Pinned Answers. Administrators only.
+ * The wp-admin area: the tabs, and the General, Special Instructions and Pinned
+ * Answers screens. Appearance and Suggested Questions have their own classes, and use
+ * gate(), the notices and tabs() from here. Administrators only.
  *
  * Every screen asks for manage_options twice: once in the menu registration, and
  * again in the render or save handler, because a handler can be reached directly.
@@ -15,6 +17,8 @@ class SFAF_Chat_Admin {
     const MENU         = 'sfaf-chat';
     const PINS_PAGE    = 'sfaf-chat-pins';
     const DASH_PAGE    = 'sfaf-chat-dashboard';
+    const SPECIAL_PAGE = 'sfaf-chat-instructions';
+    const SPECIAL_ACTION = 'sfaf_chat_save_special';
     const SAVE_ACTION  = 'sfaf_chat_save_settings';
     const PIN_ACTION   = 'sfaf_chat_save_pin';
     const UNPIN_ACTION = 'sfaf_chat_delete_pin';
@@ -22,7 +26,16 @@ class SFAF_Chat_Admin {
     /** One-screen messages, carried across the redirect after a save. */
     const NOTICE_TRANSIENT = 'sfaf_chat_notice_';
 
+    private $appearance;
+    private $questions;
+
     public function register() {
+        $this->appearance = new SFAF_Chat_Admin_Appearance( $this );
+        $this->questions  = new SFAF_Chat_Admin_Questions( $this );
+        $this->appearance->register();
+        $this->questions->register();
+
+        add_action( 'admin_post_' . self::SPECIAL_ACTION, array( $this, 'save_special' ) );
         add_action( 'admin_menu', array( $this, 'menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
         add_action( 'admin_post_' . self::SAVE_ACTION, array( $this, 'save_settings' ) );
@@ -33,7 +46,10 @@ class SFAF_Chat_Admin {
 
     public function menu() {
         add_menu_page( 'SFAF Chat', 'SFAF Chat', self::CAP, self::MENU, array( $this, 'render_settings' ), 'dashicons-format-chat', 58 );
-        add_submenu_page( self::MENU, 'SFAF Chat Settings', 'Settings', self::CAP, self::MENU, array( $this, 'render_settings' ) );
+        add_submenu_page( self::MENU, 'SFAF Chat Settings', 'General', self::CAP, self::MENU, array( $this, 'render_settings' ) );
+        add_submenu_page( self::MENU, 'Appearance', 'Appearance', self::CAP, SFAF_Chat_Admin_Appearance::PAGE, array( $this->appearance, 'render' ) );
+        add_submenu_page( self::MENU, 'Suggested Questions', 'Suggested Questions', self::CAP, SFAF_Chat_Admin_Questions::PAGE, array( $this->questions, 'render' ) );
+        add_submenu_page( self::MENU, 'Special Instructions', 'Special Instructions', self::CAP, self::SPECIAL_PAGE, array( $this, 'render_special' ) );
         add_submenu_page( self::MENU, 'Pinned Answers', 'Pinned Answers', self::CAP, self::PINS_PAGE, array( $this, 'render_pins' ) );
         add_submenu_page( self::MENU, 'SFAF Chat Dashboard', 'Dashboard', self::CAP, self::DASH_PAGE, array( 'SFAF_Chat_Dashboard', 'render' ) );
     }
@@ -43,6 +59,35 @@ class SFAF_Chat_Admin {
             return;
         }
         wp_enqueue_style( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/css/admin.css', array(), SFAF_CHAT_VERSION );
+
+        $is_appearance = false !== strpos( (string) $hook, SFAF_Chat_Admin_Appearance::PAGE );
+        if ( $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) ) {
+            wp_enqueue_script( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/js/admin.js', array(), SFAF_CHAT_VERSION, true );
+            wp_add_inline_script( 'sfaf-chat-admin', 'window.sfafChatAdmin=' . wp_json_encode( array( 'pairs' => SFAF_Chat_Appearance::PAIRS ) ) . ';', 'before' );
+        }
+    }
+
+    /** The same row of tabs on every screen. */
+    public function tabs( $current ) {
+        $tabs = array(
+            self::MENU                       => 'General',
+            SFAF_Chat_Admin_Appearance::PAGE => 'Appearance',
+            SFAF_Chat_Admin_Questions::PAGE  => 'Suggested Questions',
+            self::SPECIAL_PAGE               => 'Special Instructions',
+            self::PINS_PAGE                  => 'Pinned Answers',
+            self::DASH_PAGE                  => 'Dashboard',
+        );
+        echo '<nav class="nav-tab-wrapper sfaf-chat-tabs" aria-label="SFAF Chat sections">';
+        foreach ( $tabs as $slug => $label ) {
+            printf(
+                '<a class="nav-tab%s" href="%s"%s>%s</a>',
+                $slug === $current ? ' nav-tab-active' : '',
+                esc_url( admin_url( 'admin.php?page=' . $slug ) ),
+                $slug === $current ? ' aria-current="page"' : '',
+                esc_html( $label )
+            );
+        }
+        echo '</nav>';
     }
 
     public function settings_link( $links ) {
@@ -50,7 +95,7 @@ class SFAF_Chat_Admin {
         return $links;
     }
 
-    private function gate() {
+    public function gate() {
         if ( ! current_user_can( self::CAP ) ) {
             wp_die( 'You do not have permission to do this.', 403 );
         }
@@ -58,11 +103,11 @@ class SFAF_Chat_Admin {
 
     /* ================================ NOTICES ============================= */
 
-    private function stash_notice( array $messages, $type ) {
+    public function stash_notice( array $messages, $type ) {
         set_transient( self::NOTICE_TRANSIENT . get_current_user_id(), array( 'type' => $type, 'messages' => $messages ), MINUTE_IN_SECONDS );
     }
 
-    private function show_notice() {
+    public function show_notice() {
         $key    = self::NOTICE_TRANSIENT . get_current_user_id();
         $notice = get_transient( $key );
         if ( ! is_array( $notice ) ) {
@@ -109,9 +154,8 @@ class SFAF_Chat_Admin {
         }
 
         SFAF_Chat_Settings::update( array(
-            'mode'                 => $mode,
-            'raw_questions'        => ! empty( $post['raw_questions'] ),
-            'special_instructions' => trim( str_replace( "\r\n", "\n", (string) ( $post['special_instructions'] ?? '' ) ) ),
+            'mode'          => $mode,
+            'raw_questions' => ! empty( $post['raw_questions'] ),
         ) );
 
         if ( array() === $problems ) {
@@ -134,6 +178,7 @@ class SFAF_Chat_Admin {
         ?>
         <div class="wrap sfaf-chat-admin">
             <h1>SFAF Chat Settings</h1>
+            <?php $this->tabs( self::MENU ); ?>
             <?php $this->show_notice(); ?>
 
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" autocomplete="off">
@@ -182,10 +227,6 @@ class SFAF_Chat_Admin {
                     </tr>
                 </table>
 
-                <h2><label for="sfaf-chat-special">Special instructions</label></h2>
-                <p>Added to the assistant's rules on every question, so staff can add rules without code. These add to the built-in guardrails and can't relax them. Test a few questions after any change.</p>
-                <textarea id="sfaf-chat-special" name="special_instructions" rows="6" class="large-text"><?php echo esc_textarea( (string) $settings['special_instructions'] ); ?></textarea>
-
                 <h2>Logging</h2>
                 <p><label><input type="checkbox" name="raw_questions" value="1" <?php checked( ! empty( $settings['raw_questions'] ) ); ?>>
                     Log raw question text. For internal testing only. It has no effect in Public mode, so question text is never stored for real visitors.</label></p>
@@ -212,6 +253,8 @@ class SFAF_Chat_Admin {
             'System prompt found' => $yes( is_readable( SFAF_Chat_Core::prompt_path() ) ),
             'Knowledge entries'   => (string) count( SFAF_Chat_Core::kb_entries() ),
             'Pinned answers'      => (string) count( SFAF_Chat_Pinned::all() ),
+            'Page question sets'  => (string) count( (array) ( SFAF_Chat_Starters::config()['sets'] ?? array() ) ),
+            'Colors below AA'     => (string) count( SFAF_Chat_Appearance::problems( SFAF_Chat_Appearance::all() ) ),
             'Indexed pages'       => isset( $index['records'] ) ? (string) count( $index['records'] ) : '0',
             'Index last written'  => (string) ( $index['generated'] ?? 'Never' ),
             'Log table ready'     => $yes( SFAF_Chat_Log::table_exists() ),
@@ -225,6 +268,52 @@ class SFAF_Chat_Admin {
             printf( '<tr><th scope="row">%s</th><td><code>%s</code></td></tr>', esc_html( $label ), esc_html( $value ) );
         }
         echo '</tbody></table>';
+    }
+
+    /* ========================== SPECIAL INSTRUCTIONS ====================== */
+
+    public function save_special() {
+        $this->gate();
+        check_admin_referer( self::SPECIAL_ACTION );
+
+        $text = wp_unslash( $_POST['special_instructions'] ?? '' );
+        SFAF_Chat_Settings::update( array(
+            'special_instructions' => trim( str_replace( "\r\n", "\n", is_string( $text ) ? $text : '' ) ),
+        ) );
+
+        $this->stash_notice( array( 'Special instructions saved.' ), 'success' );
+        wp_safe_redirect( admin_url( 'admin.php?page=' . self::SPECIAL_PAGE ) );
+        exit;
+    }
+
+    public function render_special() {
+        $this->gate();
+        ?>
+        <div class="wrap sfaf-chat-admin">
+            <h1>Special Instructions</h1>
+            <?php $this->tabs( self::SPECIAL_PAGE ); ?>
+            <?php $this->show_notice(); ?>
+
+            <div class="sfaf-chat-explain">
+                <h2>How this works</h2>
+                <p>This text is added to the assistant's rules on every question, so staff can add rules without code.</p>
+                <ul>
+                    <li><strong>It adds to the guardrails and can't relax them.</strong> The assistant is told that the scope, safety and crisis rules always win.</li>
+                    <li><strong>It takes effect on the next question.</strong> Try a few questions after any change, including ones the assistant should refuse.</li>
+                    <li><strong>Pinned answers aren't affected,</strong> because the assistant never writes them.</li>
+                    <li>If you clear this box, it stays clear. Updates don't put the first rule back.</li>
+                </ul>
+            </div>
+
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                <input type="hidden" name="action" value="<?php echo esc_attr( self::SPECIAL_ACTION ); ?>">
+                <?php wp_nonce_field( self::SPECIAL_ACTION ); ?>
+                <h2><label for="sfaf-chat-special">Instructions</label></h2>
+                <textarea id="sfaf-chat-special" name="special_instructions" rows="8" class="large-text"><?php echo esc_textarea( (string) SFAF_Chat_Settings::get( 'special_instructions' ) ); ?></textarea>
+                <?php submit_button( 'Save instructions' ); ?>
+            </form>
+        </div>
+        <?php
     }
 
     /* ============================= PINNED ANSWERS ========================= */
@@ -280,6 +369,7 @@ class SFAF_Chat_Admin {
         ?>
         <div class="wrap sfaf-chat-admin">
             <h1>Pinned Answers</h1>
+            <?php $this->tabs( self::PINS_PAGE ); ?>
             <?php $this->show_notice(); ?>
 
             <div class="sfaf-chat-explain">

@@ -98,6 +98,22 @@ class SFAF_Chat_Core {
     /* ============================ SFAF HOST ALLOWLIST ===================== */
 
     /**
+     * Replaces em dashes with a comma, for text from outside the curated files: indexed
+     * pages, the events feed, earlier replies in the thread. Source text teaches the
+     * model its style, and titles also reach visitors as link labels.
+     *
+     * Never use this on pinned answers, which are verbatim, or on what a visitor typed.
+     */
+    public static function no_em_dash( $text ) {
+        $text = (string) $text;
+        if ( false === strpos( $text, "\xE2\x80\x94" ) ) {
+            return $text;
+        }
+        $clean = preg_replace( '/[\s,]*\x{2014}[\s,]*/u', ', ', $text );
+        return trim( null === $clean ? str_replace( "\xE2\x80\x94", ', ', $text ) : $clean, ", \t\r\n" );
+    }
+
+    /**
      * Card images may only come from SFAF domains: sfaf.org, *.sfaf.org,
      * tweaker.org (+ www). HTTPS only. widget.js repeats this check, so keep the
      * two lists identical.

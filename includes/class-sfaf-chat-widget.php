@@ -47,7 +47,7 @@ class SFAF_Chat_Widget {
             return;
         }
 
-        $config = array( 'proxy' => self::ask_url() );
+        $config = self::config();
 
         /*
          * Only in admins-only mode, which is only ever rendered for a logged-in
@@ -62,6 +62,14 @@ class SFAF_Chat_Widget {
         wp_add_inline_script( 'sfaf-chat-widget', 'window.sfafChatConfig=' . wp_json_encode( $config ) . ';', 'before' );
     }
 
+    /** What the widget needs from the plugin, wherever it runs. */
+    private static function config() {
+        return array(
+            'proxy' => self::ask_url(),
+            'theme' => SFAF_Chat_Appearance::theme(),
+        );
+    }
+
     /** What the stable URL serves right now. */
     public static function script_body() {
         if ( SFAF_Chat_Settings::MODE_PUBLIC !== SFAF_Chat_Settings::mode() ) {
@@ -72,6 +80,6 @@ class SFAF_Chat_Widget {
         if ( false === $widget ) {
             return "/* SFAF Chat is unavailable. */\n";
         }
-        return 'window.sfafChatConfig=' . wp_json_encode( array( 'proxy' => self::ask_url() ) ) . ";\n" . $widget;
+        return 'window.sfafChatConfig=' . wp_json_encode( self::config() ) . ";\n" . $widget;
     }
 }

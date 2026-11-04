@@ -240,7 +240,7 @@ class SFAF_Chat_Indexer {
                 }
             }
 
-            // Drop pages that left this site's sitemap — but only if every sitemap for
+            // Drop pages that left this site's sitemap, but only if every sitemap for
             // the site was read successfully, so a transient error can't wipe the index.
             if ($ok) {
                 foreach ($records as $url => $r) {
@@ -306,7 +306,7 @@ class SFAF_Chat_Indexer {
 
     /**
      * GET a URL. Returns [body, null] on success or [null, reason] on failure.
-     * $want: 'html' or 'xml' — checked against Content-Type loosely.
+     * $want: 'html' or 'xml', checked against Content-Type loosely.
      */
     private static function http_get(string $url, string $want): array
     {
@@ -435,9 +435,9 @@ class SFAF_Chat_Indexer {
             ?? ($h1 ? self::clean_ws($h1->textContent) : '')
             ?: ($titleNode ? self::clean_ws($titleNode->textContent) : '');
         // "Page - San Francisco AIDS Foundation" → "Page"
-        $title = preg_replace('/\s+[-|–]\s+San Francisco AIDS Foundation$/u', '', (string)$title);
+        $title = preg_replace('/\s+[-|–\x{2014}]\s+San Francisco AIDS Foundation$/u', '', (string)$title);
 
-        // Headings are good keywords — collect before stripping.
+        // Headings are good keywords, so collect before stripping.
         $headings = [];
         foreach ($xp->query('//h1|//h2|//h3') as $h) {
             $headings[] = self::clean_ws($h->textContent);

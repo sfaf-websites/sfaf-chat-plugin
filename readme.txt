@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -31,6 +31,14 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.1.0 =
+* New widget design: an Ask SFAF launcher beside the Weglot selector and a centered
+  panel, with the SFAF brand colors and squared corners.
+* Suggested questions, chosen by page. Voice input and read aloud, using the browser's
+  own speech features.
+* New admin screens: Appearance, with a contrast check and a reset, and Suggested
+  Questions. Special Instructions has its own screen.
 
 = 1.0.0 =
 * First plugin release. Replaces the standalone files with a WordPress plugin:
