@@ -22,6 +22,7 @@ foreach ( array(
     'sfaf_chat_pinned',
     'sfaf_chat_appearance',
     'sfaf_chat_starters',
+    'sfaf_chat_models',
     'sfaf_chat_index_state',
     'sfaf_chat_installed_version',
 ) as $sfaf_chat_option ) {

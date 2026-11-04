@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 1.1.1
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -31,6 +31,14 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.1.1 =
+* Brief Gemini failures no longer reach visitors. A 429, a 5xx or a connection error
+  is retried up to 3 times on the same model, with short backoff. Other errors are not
+  retried, and there is no second model.
+* The Model setting is now a dropdown of Flash and Flash-Lite text models, with a
+  Check models button that asks Google what the saved key can use.
+* The log records the model and the number of attempts for each question.
 
 = 1.1.0 =
 * New widget design: an Ask SFAF launcher beside the Weglot selector and a centered

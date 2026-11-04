@@ -19,6 +19,7 @@ class SFAF_Chat_Admin {
     const DASH_PAGE    = 'sfaf-chat-dashboard';
     const SPECIAL_PAGE = 'sfaf-chat-instructions';
     const SPECIAL_ACTION = 'sfaf_chat_save_special';
+    const MODELS_ACTION  = 'sfaf_chat_check_models';
     const SAVE_ACTION  = 'sfaf_chat_save_settings';
     const PIN_ACTION   = 'sfaf_chat_save_pin';
     const UNPIN_ACTION = 'sfaf_chat_delete_pin';
@@ -36,6 +37,7 @@ class SFAF_Chat_Admin {
         $this->questions->register();
 
         add_action( 'admin_post_' . self::SPECIAL_ACTION, array( $this, 'save_special' ) );
+        add_action( 'admin_post_' . self::MODELS_ACTION, array( $this, 'check_models' ) );
         add_action( 'admin_menu', array( $this, 'menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
         add_action( 'admin_post_' . self::SAVE_ACTION, array( $this, 'save_settings' ) );
@@ -168,6 +170,18 @@ class SFAF_Chat_Admin {
         exit;
     }
 
+    /** The only place that asks Google for the model list. */
+    public function check_models() {
+        $this->gate();
+        check_admin_referer( self::MODELS_ACTION );
+
+        $result = SFAF_Chat_Models::refresh();
+        $this->stash_notice( array( $result['message'] ), $result['ok'] ? 'success' : 'warning' );
+
+        wp_safe_redirect( admin_url( 'admin.php?page=' . self::MENU ) );
+        exit;
+    }
+
     public function render_settings() {
         $this->gate();
 
@@ -212,10 +226,23 @@ class SFAF_Chat_Admin {
                         </td>
                     </tr>
                     <tr>
-                        <th scope="row"><label for="sfaf-chat-model">Model string</label></th>
+                        <th scope="row"><label for="sfaf-chat-model">Model</label></th>
                         <td>
-                            <input type="text" id="sfaf-chat-model" name="model" class="regular-text code" value="<?php echo esc_attr( SFAF_Chat_Credentials::model() ); ?>">
-                            <p class="description">Check the current model name in AI Studio before changing this, and re-test the refusals afterward.</p>
+                            <select id="sfaf-chat-model" name="model">
+                                <?php
+                                $saved_model = SFAF_Chat_Credentials::model();
+                                $listed      = SFAF_Chat_Models::available();
+                                foreach ( SFAF_Chat_Models::choices() as $choice ) {
+                                    $note = SFAF_Chat_Credentials::DEFAULT_MODEL === $choice ? ' (default)' : '';
+                                    $note = in_array( $choice, $listed, true ) ? $note : ' (saved, no longer listed)';
+                                    printf( '<option value="%s"%s>%s</option>', esc_attr( $choice ), selected( $saved_model, $choice, false ), esc_html( $choice . $note ) );
+                                }
+                                ?>
+                            </select>
+                            <button type="submit" form="sfaf-chat-check-models" class="button">Check models</button>
+                            <p class="description">Flash and Flash-Lite text models only. Check models asks Google what the saved key can use, so save any changes on this page first.
+                                <?php $checked = SFAF_Chat_Models::checked_at(); echo $checked ? esc_html( 'Last checked ' . wp_date( 'M j, g:i a', $checked, SFAF_Chat_Core::timezone() ) . ' Pacific.' ) : 'Not checked yet, so this is the built-in list.'; ?></p>
+                            <p class="description">Re-test the refusals after changing the model.</p>
                         </td>
                     </tr>
                     <tr>
@@ -232,6 +259,11 @@ class SFAF_Chat_Admin {
                     Log raw question text. For internal testing only. It has no effect in Public mode, so question text is never stored for real visitors.</label></p>
 
                 <?php submit_button( 'Save settings' ); ?>
+            </form>
+
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="sfaf-chat-check-models">
+                <input type="hidden" name="action" value="<?php echo esc_attr( self::MODELS_ACTION ); ?>">
+                <?php wp_nonce_field( self::MODELS_ACTION ); ?>
             </form>
 
             <h2>Status</h2>

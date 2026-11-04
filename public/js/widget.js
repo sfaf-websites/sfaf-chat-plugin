@@ -42,7 +42,9 @@
   var SCOPE = (script && script.getAttribute('data-scope')) || 'all';
 
   var PHONE = '415-487-3000';
-  var REQUEST_TIMEOUT_MS = 30000;
+  // KEEP ABOVE RETRY_BUDGET_SECONDS IN includes/class-sfaf-chat-endpoint.php, so a
+  // retry that is still going on the server isn't abandoned here.
+  var REQUEST_TIMEOUT_MS = 50000;
 
   var GREETING = "Hi! I can help you find SFAF services, locations and hours, and ways " +
     "to get involved. What are you looking for?";

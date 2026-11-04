@@ -3,8 +3,9 @@
  * One de-identified, topic-tagged row per question, in a database table. A table
  * has no URL, so it cannot be fetched over HTTP.
  *
- * WHAT IS RECORDED: time, topic, in_scope, flag, which record id was linked, and
- * which pinned answer was used. Question text only while raw logging is on, which
+ * WHAT IS RECORDED: time, topic, in_scope, flag, which record id was linked, which
+ * pinned answer was used, and how the call went: HTTP status, model and number of
+ * attempts. Question text only while raw logging is on, which
  * is internal testing only (SFAF_Chat_Settings::log_raw_questions()).
  *
  * WHAT IS DELIBERATELY *NOT* RECORDED: no IP address, no user id, no session id,
@@ -45,6 +46,8 @@ class SFAF_Chat_Log {
   link varchar(120) DEFAULT NULL,
   pin varchar(40) DEFAULT NULL,
   http smallint(5) unsigned DEFAULT NULL,
+  model varchar(64) DEFAULT NULL,
+  attempts tinyint(3) unsigned DEFAULT NULL,
   question text DEFAULT NULL,
   PRIMARY KEY  (id),
   KEY ts (ts)
@@ -58,7 +61,7 @@ class SFAF_Chat_Log {
     }
 
     /**
-     * @param array $entry topic, in_scope, flag, link, pin, http, question.
+     * @param array $entry topic, in_scope, flag, link, pin, http, model, attempts, question.
      */
     public static function write( array $entry ) {
         global $wpdb;
@@ -73,6 +76,8 @@ class SFAF_Chat_Log {
             'link'     => $entry['link'] ?? null,
             'pin'      => $entry['pin'] ?? null,
             'http'     => isset( $entry['http'] ) ? (int) $entry['http'] : null,
+            'model'    => $entry['model'] ?? null,
+            'attempts' => isset( $entry['attempts'] ) ? (int) $entry['attempts'] : null,
             'question' => SFAF_Chat_Settings::log_raw_questions() ? (string) ( $entry['question'] ?? '' ) : null,
         );
 
@@ -108,7 +113,7 @@ class SFAF_Chat_Log {
         $cutoff = gmdate( 'Y-m-d H:i:s', time() - ( (int) $days * DAY_IN_SECONDS ) );
         $table  = self::table();
         $rows   = $wpdb->get_results(
-            $wpdb->prepare( "SELECT ts, topic, in_scope, flag, link, pin, question FROM $table WHERE ts >= %s ORDER BY ts ASC", $cutoff ),
+            $wpdb->prepare( "SELECT ts, topic, in_scope, flag, link, pin, http, model, attempts, question FROM $table WHERE ts >= %s ORDER BY ts ASC", $cutoff ),
             ARRAY_A
         );
         return is_array( $rows ) ? $rows : array();

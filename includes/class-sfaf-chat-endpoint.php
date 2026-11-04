@@ -12,7 +12,7 @@
  *     the model (the curated core always goes in full)
  *   - stamps today's date from the SERVER clock (the model never computes dates)
  *   - replays the recent thread so follow-up questions work
- *   - calls Gemini for a STRICT JSON answer
+ *   - calls Gemini for a STRICT JSON answer, retrying brief failures on the SAME model
  *   - resolves the model's record id to a REAL url, and builds a card from stored
  *     Open Graph data (see LINK RESOLUTION, a safety mechanism, not a convenience)
  *   - swaps in a pinned answer verbatim where one applies
@@ -44,6 +44,19 @@ class SFAF_Chat_Endpoint {
     // and how much of each page's text. The curated core is always sent in full.
     const PREFILTER_TOP_N       = 12;
     const MAX_RECORD_WORDS_SENT = 500;
+
+    /*
+     * RETRIES. Google answers 503 under load, often for a moment, so one failure must
+     * not reach the visitor. Same model every time: there is deliberately no second
+     * model, because a different model hasn't had its refusals tested.
+     *
+     * RETRY_BUDGET_SECONDS caps the whole exchange. KEEP IT BELOW REQUEST_TIMEOUT_MS IN
+     * public/js/widget.js, or the widget gives up on a retry that was about to work.
+     */
+    const MAX_ATTEMPTS            = 3;
+    const RETRY_BUDGET_SECONDS    = 40;
+    const ATTEMPT_TIMEOUT_SECONDS = 20;
+    const MIN_ATTEMPT_SECONDS     = 5;   // not worth starting one with less time left
 
     // Live events feed. NOT ACTIVE YET. See fetch_upcoming_events().
     const EVENTS_ENABLED = false;
@@ -434,9 +447,10 @@ class SFAF_Chat_Endpoint {
         );
 
         $api_base = rtrim( (string) apply_filters( 'sfaf_chat_api_base', 'https://generativelanguage.googleapis.com/v1beta' ), '/' );
-        $endpoint = $api_base . '/models/' . rawurlencode( SFAF_Chat_Credentials::model() ) . ':generateContent';
+        $model    = SFAF_Chat_Credentials::model();
+        $endpoint = $api_base . '/models/' . rawurlencode( $model ) . ':generateContent';
 
-        $reply = wp_remote_post( $endpoint, array(
+        $call = self::call_gemini( $endpoint, array(
             // The key travels in a header, not the query string: query strings are
             // the part most likely to end up in an access log or an error page.
             'headers' => array(
@@ -444,10 +458,11 @@ class SFAF_Chat_Endpoint {
                 'x-goog-api-key' => trim( $api_key ),
             ),
             'body'    => json_encode( $payload ),
-            'timeout' => 25,
         ) );
 
-        $http_code = is_wp_error( $reply ) ? 0 : (int) wp_remote_retrieve_response_code( $reply );
+        $reply     = $call['reply'];
+        $http_code = $call['http'];
+        $attempts  = $call['attempts'];
 
         if ( is_wp_error( $reply ) || $http_code >= 400 ) {
             // Log the failure, but never the key and never the upstream body
@@ -459,6 +474,8 @@ class SFAF_Chat_Endpoint {
                 'flag'     => 'api_error',
                 'link'     => null,
                 'http'     => $http_code,
+                'model'    => $model,
+                'attempts' => $attempts,
             ) );
             return $this->fail( 'The assistant is unavailable right now. Please try again shortly.', 502 );
         }
@@ -478,6 +495,8 @@ class SFAF_Chat_Endpoint {
                 'in_scope' => null,
                 'flag'     => 'parse_error',
                 'link'     => 'contact',
+                'model'    => $model,
+                'attempts' => $attempts,
             ) );
 
             return new WP_REST_Response( array(
@@ -557,6 +576,8 @@ class SFAF_Chat_Endpoint {
             'flag'     => $flag,
             'link'     => $link_id,
             'pin'      => $pin_id,
+            'model'    => $model,
+            'attempts' => $attempts,
         ) );
 
         return new WP_REST_Response( array(
@@ -566,6 +587,53 @@ class SFAF_Chat_Endpoint {
             'card'     => $card,
             'in_scope' => $answered_in_scope,
         ), 200 );
+    }
+
+    /** Worth another try? Overload and connection trouble, never a bad request. */
+    private static function retryable( $reply, $http_code ) {
+        return is_wp_error( $reply ) || 429 === $http_code || $http_code >= 500;
+    }
+
+    /**
+     * Call Gemini, retrying on the same model with short backoff and jitter.
+     *
+     * Stops at MAX_ATTEMPTS, or sooner if the time left couldn't fit another useful
+     * attempt. A 404 or other 4xx comes straight back: it will never get better.
+     *
+     * @return array{reply:mixed,http:int,attempts:int}
+     */
+    private static function call_gemini( $endpoint, array $request ) {
+        $budget  = (float) apply_filters( 'sfaf_chat_retry_budget', self::RETRY_BUDGET_SECONDS );
+        $start   = microtime( true );
+        $attempt = 0;
+
+        // Only matters on hosts that count waiting toward PHP's limit.
+        if ( function_exists( 'set_time_limit' ) ) {
+            @set_time_limit( self::RETRY_BUDGET_SECONDS + 20 );
+        }
+
+        while ( true ) {
+            $attempt++;
+            $left  = $budget - ( microtime( true ) - $start );
+            $reply = wp_remote_post( $endpoint, array_merge( $request, array(
+                'timeout' => max( 1, min( self::ATTEMPT_TIMEOUT_SECONDS, $left ) ),
+            ) ) );
+            $http  = is_wp_error( $reply ) ? 0 : (int) wp_remote_retrieve_response_code( $reply );
+
+            if ( ! self::retryable( $reply, $http ) || $attempt >= self::MAX_ATTEMPTS ) {
+                break;
+            }
+
+            // Doubling base plus jitter: about 0.5 to 1s, then 1 to 1.5s.
+            $delay = 0.5 * ( 2 ** ( $attempt - 1 ) ) + mt_rand( 0, 500 ) / 1000;
+            $left  = $budget - ( microtime( true ) - $start );
+            if ( $left < $delay + self::MIN_ATTEMPT_SECONDS ) {
+                break;
+            }
+            usleep( (int) ( $delay * 1000000 ) );
+        }
+
+        return array( 'reply' => $reply, 'http' => $http, 'attempts' => $attempt );
     }
 
     /** Staff instructions, added after the base rules. Empty adds nothing at all. */

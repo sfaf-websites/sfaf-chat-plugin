@@ -104,8 +104,8 @@ class SFAF_Chat_Credentials {
                 $problems[] = sprintf( 'The index token was not saved. It needs at least %d characters.', self::MIN_TOKEN_LENGTH );
                 continue;
             }
-            if ( 'model' === $key && '' !== $value && ! preg_match( '/^[a-z0-9][a-z0-9.\-]*$/i', $value ) ) {
-                $problems[] = 'The model string was not saved. Use letters, numbers, dots and hyphens only.';
+            if ( 'model' === $key && '' !== $value && ! SFAF_Chat_Models::allowed( $value ) ) {
+                $problems[] = 'That model is not in the list, so the saved model was kept.';
                 continue;
             }
             self::set( $key, $value );
