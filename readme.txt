@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.2.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -31,6 +31,17 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.2.0 =
+* Live events. The assistant reads upcoming events straight from the SFAF Calendar on
+  this site: published only, not cancelled, not private, not over yet, soonest first.
+* Questions are matched to the calendar's organizers, series, categories and any other
+  event labels, read fresh each time, then to event titles and descriptions. A
+  recurring event is offered once, as its next date.
+* A matched event comes back as a card with its date, place and a link to its page.
+  When nothing clearly matches, the assistant points to the events calendar instead.
+* Today, tonight, tomorrow, this week, the weekend and this or next month are worked
+  out on the server, never by the model.
 
 = 1.1.1 =
 * Brief Gemini failures no longer reach visitors. A 429, a 5xx or a connection error

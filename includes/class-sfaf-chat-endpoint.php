@@ -58,8 +58,9 @@ class SFAF_Chat_Endpoint {
     const ATTEMPT_TIMEOUT_SECONDS = 20;
     const MIN_ATTEMPT_SECONDS     = 5;   // not worth starting one with less time left
 
-    // Live events feed. NOT ACTIVE YET. See fetch_upcoming_events().
-    const EVENTS_ENABLED = false;
+    // Live events, read from the SFAF Calendar on this site. See SFAF_Chat_Events.
+    // Does nothing where the calendar isn't installed.
+    const EVENTS_ENABLED = true;
 
     // Topic vocabulary the model must choose from (also listed in
     // data/system-prompt.txt, keep the two in step). Anything else logs as "other".
@@ -351,18 +352,25 @@ class SFAF_Chat_Endpoint {
             $related = SFAF_Chat_Core::rank_records( $candidates, $query, self::PREFILTER_TOP_N );
         }
 
-        // Tier 3: live events, inactive until EVENTS_ENABLED.
-        $events = array();
+        // Tier 3: live events from the calendar on this site, matched to the question.
+        // A failure here costs the events, never the answer.
+        $events      = array();
+        $calendar    = null;
+        $events_note = '';
         if ( self::EVENTS_ENABLED ) {
-            $events_url = (string) apply_filters( 'sfaf_chat_events_endpoint', '' );
-            if ( '' !== $events_url ) {
-                $events = array_values( array_filter( self::fetch_upcoming_events( $events_url ), $in_scope_source ) );
+            try {
+                $live = SFAF_Chat_Events::for_question( $question, $user_turns );
+            } catch ( Throwable $e ) {
+                $live = array( 'events' => array(), 'calendar' => null, 'note' => '' );
             }
+            $events      = array_values( array_filter( $live['events'], $in_scope_source ) );
+            $calendar    = ( is_array( $live['calendar'] ) && $in_scope_source( $live['calendar'] ) ) ? $live['calendar'] : null;
+            $events_note = SFAF_Chat_Core::no_em_dash( (string) $live['note'] );
         }
 
         // Every record the model can see, and therefore the ONLY ids it can link to.
         $record_map = array();
-        foreach ( array_merge( $core, $related, $events ) as $r ) {
+        foreach ( array_merge( $core, $related, $events, null === $calendar ? array() : array( $calendar ) ) as $r ) {
             $record_map[ $r['id'] ] = $r;
         }
 
@@ -414,12 +422,25 @@ class SFAF_Chat_Endpoint {
                 . json_encode( array_map( $for_model, $related ), $enc );
         }
 
+        $calendar_hint = null === $calendar ? 'point to the events page'
+            : 'link the events calendar (id "' . SFAF_Chat_Events::CALENDAR_ID . '")';
+
         if ( array() !== $events ) {
             $system_instruction .= "\n\n## UPCOMING EVENTS (live)\n"
-                . "This feed is live and has ALREADY been filtered server-side to future events only. "
-                . "Treat every event listed here as upcoming. Do not compare dates, do not filter, "
-                . "do not decide whether something has passed.\n"
+                . "Read from the SFAF events calendar just now and ALREADY filtered server-side: published, "
+                . "not cancelled, not private, not yet over, soonest first. Treat every event listed here as "
+                . "upcoming. Do not compare dates, do not filter, do not decide whether something has passed "
+                . "or which is next: the list is already in order, and \"date\" is exactly as the calendar "
+                . "gives it. {$events_note}\n"
+                . "If none of these is clearly what the visitor asked about, do not offer one as if it were; "
+                . "{$calendar_hint} instead. When you mention one event, link it by its id.\n"
                 . json_encode( array_map( $for_model, $events ), $enc );
+        }
+
+        if ( null !== $calendar ) {
+            $system_instruction .= "\n\n## EVENTS CALENDAR\n"
+                . ( array() === $events ? $events_note . "\n" : '' )
+                . json_encode( array_map( $for_model, array( $calendar ) ), $enc );
         }
 
         /* --------------------------- CALL GEMINI -------------------------- */
@@ -667,9 +688,7 @@ class SFAF_Chat_Endpoint {
      * Card for card-worthy records (events and articles) from STORED fields only.
      * Returns null for ordinary pages, which get a plain link.
      *
-     * In v1 no card-worthy record reaches the model (blog posts are filtered out
-     * and the events feed is off), so this always returns null today; the path is
-     * wired for when either is turned on.
+     * Only events reach here today: blog posts are filtered out before the model.
      */
     private static function card_for( array $r ) {
         $type = $r['type'] ?? 'page';
@@ -681,7 +700,8 @@ class SFAF_Chat_Endpoint {
         $image = $og['image'] ?? ( $r['image'] ?? null );
 
         if ( 'event' === $type ) {
-            $subtitle = trim( implode( ' · ', array_filter( array( (string) ( $r['date'] ?? '' ), (string) ( $r['location'] ?? '' ) ) ) ) );
+            $place    = (string) ( ( $r['location_short'] ?? '' ) ?: ( $r['location'] ?? '' ) );
+            $subtitle = trim( implode( ' · ', array_filter( array( (string) ( $r['date'] ?? '' ), $place ) ) ) );
         } else {
             $subtitle = (string) ( $og['description'] ?? '' );
             if ( mb_strlen( $subtitle ) > 140 ) {
@@ -700,65 +720,5 @@ class SFAF_Chat_Endpoint {
             'url'       => (string) $r['url'],
             'cta'       => 'event' === $type ? 'Event details' : 'Read article',
         );
-    }
-
-    /* ================================ EVENTS ============================== */
-    /**
-     * NOT ACTIVE YET: EVENTS_ENABLED is false.
-     *
-     * Waiting on the events calendar to expose a machine-readable JSON endpoint.
-     *
-     * Expected feed: a JSON array (or {"events": [...]}) of objects with
-     *   title, date, location, url (or registration_url), description, image (optional)
-     * Each becomes a record of type "event", so the model can reference it by id
-     * and the endpoint can render it as a card. Events without an https url are
-     * skipped.
-     *
-     * DIVISION OF LABOUR. The calendar, or this function, does ALL date and tag
-     * filtering server-side, and hands the model a list that is already correct.
-     * The model must never compare dates, never decide whether an event has
-     * passed, and never compute "next" anything.
-     */
-    private static function fetch_upcoming_events( $endpoint ) {
-        $reply = wp_remote_get( $endpoint, array( 'timeout' => 4 ) );   // short: never stall an answer
-
-        if ( is_wp_error( $reply ) || (int) wp_remote_retrieve_response_code( $reply ) >= 400 ) {
-            return array();
-        }
-
-        $decoded = json_decode( (string) wp_remote_retrieve_body( $reply ), true );
-        $list    = is_array( $decoded['events'] ?? null ) ? $decoded['events'] : $decoded;
-        if ( ! is_array( $list ) ) {
-            return array();
-        }
-
-        $out = array();
-        foreach ( array_slice( $list, 0, 20 ) as $e ) {
-            if ( ! is_array( $e ) ) {
-                continue;
-            }
-            $url = (string) ( $e['url'] ?? $e['registration_url'] ?? '' );
-            if ( ! preg_match( '#^https://#i', $url ) || empty( $e['title'] ) ) {
-                continue;
-            }
-            $out[] = array(
-                'id'       => 'evt-' . substr( sha1( $url . '|' . ( $e['date'] ?? '' ) ), 0, 10 ),
-                'title'    => (string) $e['title'],
-                'url'      => $url,
-                // Tagged with the FEED's site, not the registration link's host
-                // (which may be a ticketing service).
-                'source'   => 'resources.sfaf.org',
-                'type'     => 'event',
-                'date'     => (string) ( $e['date'] ?? '' ),
-                'location' => (string) ( $e['location'] ?? '' ),
-                'content'  => (string) ( $e['description'] ?? '' ),
-                'og'       => array(
-                    'title'       => (string) $e['title'],
-                    'description' => (string) ( $e['description'] ?? '' ),
-                    'image'       => isset( $e['image'] ) ? (string) $e['image'] : null,
-                ),
-            );
-        }
-        return $out;
     }
 }
