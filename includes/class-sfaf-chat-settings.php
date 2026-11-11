@@ -29,6 +29,10 @@ class SFAF_Chat_Settings {
     /** Stored by 1.2.0 and earlier; read as on. See the note at the top. */
     const LEGACY_PUBLIC = 'public';
 
+    /** What the chat says first, until staff write their own (Welcome & Alerts screen). */
+    const DEFAULT_WELCOME = 'Hi! How can I help you today?';
+    const MAX_WELCOME     = 300;
+
     /** First-run text for the special instructions. Editable, and may be cleared. */
     const SEED_INSTRUCTIONS = 'Never use em dashes; use commas or periods instead';
 
@@ -37,6 +41,7 @@ class SFAF_Chat_Settings {
             'mode'                 => self::MODE_OFF,
             'raw_questions'        => false,
             'special_instructions' => '',
+            'welcome'              => '',
         );
     }
 
@@ -64,6 +69,21 @@ class SFAF_Chat_Settings {
 
     public static function update( array $changes ) {
         update_option( self::OPTION, array_merge( self::all(), $changes ) );
+    }
+
+    /**
+     * The welcome message the widget opens with: what staff saved, or the default
+     * when nothing is saved. Plain text; the widget renders it with textContent.
+     */
+    public static function welcome() {
+        $text = trim( (string) self::get( 'welcome' ) );
+        return '' !== $text ? $text : self::DEFAULT_WELCOME;
+    }
+
+    /** Clean a welcome message on its way in: plain text, line breaks kept, capped. */
+    public static function clean_welcome( $text ) {
+        $text = sanitize_textarea_field( (string) $text );
+        return trim( mb_substr( $text, 0, self::MAX_WELCOME ) );
     }
 
     /** 'on' or 'off'. Nothing else is ever returned. */

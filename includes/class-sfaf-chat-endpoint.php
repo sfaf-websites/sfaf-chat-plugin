@@ -227,7 +227,13 @@ class SFAF_Chat_Endpoint {
         $body = json_decode( (string) $request->get_body(), true );
         $set  = SFAF_Chat_Starters::for_url( is_array( $body ) ? ( $body['url'] ?? '' ) : '' );
 
-        return new WP_REST_Response( array( 'ok' => true, 'questions' => $set['questions'] ), 200 );
+        // Active alerts ride along: this call is made each time the chat opens and is
+        // never cached, so an alert shows from its first day and clears after its last.
+        $alerts = array_map( function ( $a ) {
+            return array( 'id' => $a['id'], 'text' => $a['text'] );
+        }, SFAF_Chat_Alerts::active() );
+
+        return new WP_REST_Response( array( 'ok' => true, 'questions' => $set['questions'], 'alerts' => $alerts ), 200 );
     }
 
     /* ================================== ASK =============================== */
@@ -546,6 +552,10 @@ class SFAF_Chat_Endpoint {
                 . ( array() === $events ? $events_note . "\n" : '' )
                 . json_encode( array_map( $for_model, array( $calendar ) ), $enc );
         }
+
+        // Closures from the calendar and staff alerts, when there is something current
+        // or the visitor asks whether we're open. Empty otherwise, so it adds nothing.
+        $system_instruction .= SFAF_Chat_Closures::status_section( $question, SFAF_Chat_Alerts::active() );
 
         /* --------------------------- CALL GEMINI -------------------------- */
 

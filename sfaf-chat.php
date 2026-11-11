@@ -3,7 +3,7 @@
  * Plugin Name: SFAF Chat
  * Plugin URI: https://sfaf.org
  * Description: The San Francisco AIDS Foundation website assistant. Answers questions about SFAF services from curated, staff-reviewed knowledge, with guardrails, de-identified analytics, and staff-approved pinned answers.
- * Version: 1.8.0
+ * Version: 1.9.0
  * Author: San Francisco AIDS Foundation
  * Author URI: https://sfaf.org
  * License: GPL v2 or later
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'SFAF_CHAT_VERSION', '1.8.0' );
+define( 'SFAF_CHAT_VERSION', '1.9.0' );
 define( 'SFAF_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SFAF_CHAT_URL', plugin_dir_url( __FILE__ ) );
 define( 'SFAF_CHAT_FILE', __FILE__ );
@@ -29,6 +29,8 @@ require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-pinned.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-starters.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-appearance.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-events.php';
+require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-alerts.php';
+require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-closures.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-endpoint.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-indexer.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-widget.php';
@@ -43,6 +45,7 @@ function sfaf_chat_boot() {
     SFAF_Chat_Install::maybe_upgrade();
 
     add_action( SFAF_Chat_Log::CRON_HOOK, array( 'SFAF_Chat_Log', 'prune' ) );
+    add_action( SFAF_Chat_Log::CRON_HOOK, array( 'SFAF_Chat_Alerts', 'prune' ) );
 
     ( new SFAF_Chat_Endpoint() )->register();
 
@@ -50,6 +53,7 @@ function sfaf_chat_boot() {
         require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-admin.php';
         require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-admin-appearance.php';
         require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-admin-questions.php';
+        require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-admin-messages.php';
         require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-dashboard.php';
         ( new SFAF_Chat_Admin() )->register();
     }

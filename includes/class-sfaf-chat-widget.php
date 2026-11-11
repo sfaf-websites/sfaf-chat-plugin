@@ -35,8 +35,9 @@ class SFAF_Chat_Widget {
     /** What the widget needs from the plugin, wherever it runs. */
     private static function config() {
         return array(
-            'proxy' => self::ask_url(),
-            'theme' => SFAF_Chat_Appearance::theme(),
+            'proxy'    => self::ask_url(),
+            'theme'    => SFAF_Chat_Appearance::theme(),
+            'greeting' => SFAF_Chat_Settings::welcome(),
         );
     }
 

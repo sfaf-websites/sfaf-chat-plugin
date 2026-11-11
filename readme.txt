@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.8.0
+Stable tag: 1.9.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,16 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.9.0 =
+* Welcome & Alerts screen. The chat's welcome message is editable, and the default is now
+  "Hi! How can I help you today?".
+* Scheduled alerts: short notices with a first day and an optional last day, Pacific. An
+  active alert shows at the top of the chat and the assistant is told about it, so its
+  answers agree. Alerts clear themselves after their last day.
+* Closures from the SFAF Calendar: the assistant knows whether we're closed today or
+  tomorrow and which closures are coming up in the next 60 days, with their notes and what
+  stays open, and answers "are you open on Thanksgiving?" from them.
 
 = 1.8.0 =
 * The assistant now speaks as SFAF, in the first person: "our PrEP & PEP page explains...",

@@ -46,8 +46,10 @@
   // retry that is still going on the server isn't abandoned here.
   var REQUEST_TIMEOUT_MS = 50000;
 
-  var GREETING = "Hi! I can help you find SFAF services, locations and hours, and ways " +
-    "to get involved. What are you looking for?";
+  // Staff set this on the Welcome & Alerts screen; the stable script carries it.
+  var GREETING = (typeof CONFIG.greeting === 'string' && CONFIG.greeting.trim())
+    ? CONFIG.greeting.trim()
+    : 'Hi! How can I help you today?';
   var ERROR_TEXT = "Sorry, I'm having trouble right now. For help, please call SFAF at " +
     PHONE + '.';
 
@@ -196,6 +198,15 @@
     // A note from the widget itself, such as a voice message. Not part of the conversation.
     '#sfaf-chat .sfaf-note{align-self:stretch;font-size:13.5px;color:var(--sfaf-muted);padding:2px 0 2px 12px;',
     '  border-left:2px solid var(--sfaf-border);animation:sfaf-rise .34s var(--sfaf-ease) both;}',
+
+    // Staff alerts, at the top of the conversation while they are active.
+    '#sfaf-chat .sfaf-alert{align-self:stretch;background:var(--sfaf-surface-warm);color:var(--sfaf-text);',
+    '  border-left:4px solid var(--sfaf-accent);border-radius:var(--sfaf-radius);padding:10px 14px;font-size:14px;',
+    '  line-height:1.45;animation:sfaf-rise .34s var(--sfaf-ease) both;}',
+    '#sfaf-chat .sfaf-alert-kind{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;',
+    '  color:var(--sfaf-muted);margin-bottom:2px;}',
+    '#sfaf-chat .sfaf-alert p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;}',
+    '#sfaf-chat .sfaf-alert p+p{margin-top:6px;}',
 
     // Starter questions
     '#sfaf-chat .sfaf-starters{display:flex;flex-direction:column;align-items:stretch;gap:8px;max-width:84%;}',
@@ -632,7 +643,8 @@
    * starters.
    */
   var startersEl = null;
-  var startersCache = {};
+  var alertsEl = null;
+  var startersCache = {};   // page address => {questions, alerts}
 
   function pageAddress() {
     return location.origin + location.pathname;
@@ -663,19 +675,44 @@
     messages.appendChild(startersEl);
   }
 
+  // Active staff alerts ("Closed today due to weather"), first in the conversation,
+  // above the greeting. Text only, through textContent like everything else.
+  function showAlerts(list) {
+    if (alertsEl) { alertsEl.remove(); alertsEl = null; }
+    if (!list.length) return;
+    alertsEl = el('div', 'sfaf-alert');
+    alertsEl.setAttribute('role', 'note');
+    alertsEl.setAttribute('aria-label', 'Notice');
+    alertsEl.appendChild(el('div', 'sfaf-alert-kind', list.length > 1 ? 'Notices' : 'Notice'));
+    list.forEach(function (t) { alertsEl.appendChild(el('p', null, t)); });
+    messages.insertBefore(alertsEl, messages.firstChild);
+  }
+
+  function showOpening(got) {
+    showAlerts(got.alerts);
+    // Starters only until the visitor has asked something.
+    if (!asked) showStarters(got.questions);
+  }
+
   function loadStarters() {
     var mySession = session;
     var page = pageAddress();
-    if (startersCache[page]) { showStarters(startersCache[page]); return; }
+    if (startersCache[page]) { showOpening(startersCache[page]); return; }
 
     fetch(STARTERS_URL, requestOptions({ url: page }))
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (!data || !data.ok || !Array.isArray(data.questions)) return;
-        var list = data.questions.filter(function (q) { return typeof q === 'string' && q; });
-        startersCache[page] = list;
-        // Too late if the panel closed, or the visitor has already asked something.
-        if (mySession === session && isOpen() && !asked) showStarters(list);
+        var got = {
+          questions: data.questions.filter(function (q) { return typeof q === 'string' && q; }),
+          alerts: (Array.isArray(data.alerts) ? data.alerts : [])
+            .map(function (a) { return a && typeof a.text === 'string' ? a.text.trim() : ''; })
+            .filter(function (t) { return t; })
+            .slice(0, 5)
+        };
+        startersCache[page] = got;
+        // Too late if the panel closed in the meantime.
+        if (mySession === session && isOpen()) showOpening(got);
       })
       .catch(function () {});
   }
@@ -934,6 +971,7 @@
     lastAnswer = '';
     noteEl = null;
     startersEl = null;
+    alertsEl = null;
     showTyping(false);
     messages.textContent = '';
     input.value = '';
