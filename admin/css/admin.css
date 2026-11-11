@@ -123,6 +123,9 @@
 .sfaf-chat-dash .hourtable div { display: flex; justify-content: space-between; border-bottom: 1px solid var(--grid); padding: 4px 0; }
 .sfaf-chat-dash .q { color: var(--text); }
 .sfaf-chat-dash .nq { color: var(--muted); font-style: italic; }
+.sfaf-chat-dash .a { color: var(--text-2); white-space: pre-wrap; }
+.sfaf-chat-dash .exchanges td { overflow-wrap: anywhere; }
+.sfaf-chat-dash .exchanges td.meta { color: var(--muted); font-size: 12px; min-width: 120px; }
 
 @media (max-width: 560px) {
   .sfaf-chat-dash .xaxis span:nth-child(odd) { visibility: hidden; }

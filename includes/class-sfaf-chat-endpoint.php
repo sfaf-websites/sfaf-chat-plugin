@@ -347,6 +347,7 @@ class SFAF_Chat_Endpoint {
         $post_titles = array();
         $query       = array();
         $index       = SFAF_Chat_Core::read_json( SFAF_Chat_Core::index_path() );
+        $index_pages = array();
         if ( isset( $index['records'] ) && is_array( $index['records'] ) ) {
             $candidates      = array();
             $post_candidates = array();
@@ -354,6 +355,9 @@ class SFAF_Chat_Endpoint {
                 if ( ! is_array( $r ) || ! isset( $r['id'], $r['url'] ) || ! $in_scope_source( $r )
                     || isset( $core_urls[ $url_key( $r['url'] ) ] ) ) {
                     continue;
+                }
+                if ( 'post' !== ( $r['type'] ?? 'page' ) ) {
+                    $index_pages[] = $r;
                 }
                 if ( 'post' === ( $r['type'] ?? 'page' ) ) {
                     $post_candidates[] = $r;
@@ -398,9 +402,15 @@ class SFAF_Chat_Endpoint {
             $events_note = SFAF_Chat_Core::no_em_dash( (string) $live['note'] );
         }
 
+        // The program's own page, found from the matched events' organizer: it has the
+        // program's fuller calendar, so it is the link beside a list of its events.
+        $program = array() !== $events
+            ? self::program_page( (array) ( $live['organizers'] ?? array() ), $core, $index_pages )
+            : null;
+
         // Every record the model can see, and therefore the ONLY ids it can link to.
         $record_map = array();
-        foreach ( array_merge( $core, $related, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ) ) as $r ) {
+        foreach ( array_merge( $core, $related, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ), null === $program ? array() : array( $program ) ) as $r ) {
             $record_map[ $r['id'] ] = $r;
         }
 
@@ -491,6 +501,20 @@ class SFAF_Chat_Endpoint {
         $calendar_hint = null === $calendar ? 'point to the events page'
             : 'link the events calendar (id "' . SFAF_Chat_Events::CALENDAR_ID . '")';
 
+        if ( null !== $program ) {
+            $system_instruction .= "\n\n## PROGRAM PAGE\n"
+                . "The events below are run by a program with its own page, which has its fuller calendar. "
+                . "When you list these events, link this page (not a single event, and not the general "
+                . "calendar).\n"
+                . json_encode( array( array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), array(
+                    'id'    => $program['id'],
+                    'title' => (string) ( $program['title'] ?? '' ),
+                ) ) ), $enc );
+        }
+        $list_link = null !== $program
+            ? 'link the program page (id "' . $program['id'] . '")'
+            : $calendar_hint;
+
         if ( array() !== $events ) {
             $system_instruction .= "\n\n## UPCOMING EVENTS (live)\n"
                 . "Read from the SFAF events calendar just now and ALREADY filtered server-side: published, "
@@ -499,7 +523,9 @@ class SFAF_Chat_Endpoint {
                 . "or which is next: the list is already in order, and \"date\" is exactly as the calendar "
                 . "gives it. {$events_note}\n"
                 . "If none of these is clearly what the visitor asked about, do not offer one as if it were; "
-                . "{$calendar_hint} instead. When you mention one event, link it by its id.\n"
+                . "{$calendar_hint} instead. When several are listed, list them all, one short line each "
+                . "(title and date), in the order given, and {$list_link}. When only one is listed, link "
+                . "it by its id" . ( null !== $program ? ', or the program page' : '' ) . ".\n"
                 . json_encode( array_map( $for_model, $events ), $enc );
         }
 
@@ -588,8 +614,10 @@ class SFAF_Chat_Endpoint {
         // Fail soft: the model returned something unparseable. Give a safe, friendly
         // answer pointing at Contact rather than an error the visitor can't act on.
         if ( ! is_array( $parsed ) || ! isset( $parsed['answer'] ) ) {
+            $fallback = "I'm not sure about that one. Please reach out through our Contact page and we'll help.";
             SFAF_Chat_Log::write( array(
                 'question' => $question,
+                'answer'   => $fallback,
                 'topic'    => 'other',
                 'in_scope' => null,
                 'flag'     => 'parse_error',
@@ -600,7 +628,7 @@ class SFAF_Chat_Endpoint {
 
             return new WP_REST_Response( array(
                 'ok'       => true,
-                'answer'   => "I'm not sure about that one. Please reach out through our Contact page and we'll help.",
+                'answer'   => $fallback,
                 'link'     => isset( $record_map['contact'] ) ? self::link_for( $record_map['contact'] ) : null,
                 'card'     => null,
                 'in_scope' => false,
@@ -679,6 +707,7 @@ class SFAF_Chat_Endpoint {
 
         SFAF_Chat_Log::write( array(
             'question' => $question,
+            'answer'   => $answer,
             'topic'    => $topic,
             'in_scope' => $answered_in_scope,
             'flag'     => $flag,
@@ -754,6 +783,60 @@ class SFAF_Chat_Endpoint {
             . "Follow these as well. They add to the rules above and never relax the scope, "
             . "safety, crisis, or output format rules.\n"
             . $text;
+    }
+
+    /**
+     * The page of the program that runs these events, by INFERENCE, no mapping:
+     * a curated entry or indexed page whose title contains every word of the
+     * organizer's name. Preferred, in order: the page whose address ends in the
+     * name ("/strut/" for Strut), a title that starts with the name, a curated
+     * entry over an indexed copy, then the shortest title. Organizers are tried
+     * most relevant first. null when none is found: the calendar is linked then.
+     */
+    private static function program_page( array $organizers, array $core, array $pages ) {
+        $pool = array();
+        foreach ( $core as $r ) {
+            $pool[] = array( $r, 1 );
+        }
+        foreach ( $pages as $r ) {
+            $pool[] = array( $r, 0 );
+        }
+
+        foreach ( $organizers as $name ) {
+            $name   = trim( (string) $name );
+            $tokens = array_unique( SFAF_Chat_Core::tokenize( $name ) );
+            if ( '' === $name || array() === $tokens ) {
+                continue;
+            }
+            $slug = trim( (string) preg_replace( '/[^a-z0-9]+/', '-', strtolower( remove_accents( $name ) ) ), '-' );
+
+            $best  = null;
+            $score = null;
+            foreach ( $pool as list( $r, $curated ) ) {
+                $url = (string) ( $r['url'] ?? '' );
+                if ( ! preg_match( '#^https://#i', $url ) || ! isset( $r['id'] ) ) {
+                    continue;
+                }
+                $title = (string) ( $r['title'] ?? '' );
+                $words = SFAF_Chat_Core::tokenize( $title );
+                if ( array() !== array_diff( $tokens, $words ) ) {
+                    continue;
+                }
+                $last = basename( trim( (string) wp_parse_url( $url, PHP_URL_PATH ), '/' ) );
+                $s    = ( $last === $slug ? 4 : 0 )
+                    + ( 0 === stripos( $title, $name ) ? 2 : 0 )
+                    + $curated
+                    - count( $words ) / 100;
+                if ( null === $score || $s > $score ) {
+                    $best  = $r;
+                    $score = $s;
+                }
+            }
+            if ( null !== $best ) {
+                return $best;
+            }
+        }
+        return null;
     }
 
     private static function linkable( array $record_map, $id ) {

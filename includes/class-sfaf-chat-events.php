@@ -48,6 +48,7 @@ class SFAF_Chat_Events {
     const ALSO_ON      = 3;     // later dates of a series, listed on its next one
     const DESC_WORDS   = 120;
     const CANDIDATES   = 20;    // unmatched short list: series, next date each
+    const WINDOW_SENT  = 12;    // matched events in a window: each date listed, soonest first
 
     // Words that make a message about events. Compared after SFAF_Chat_Core::tokenize(),
     // which folds a trailing s, so both spellings are listed where that matters.
@@ -90,9 +91,11 @@ class SFAF_Chat_Events {
      *               is about events, names a topic, and nothing matched. The model
      *               picks from these, or none.
      *   note      one line for the model saying how the list was chosen
+     *   organizers  organizer names of the matched events, most relevant first, so
+     *               the endpoint can find the program's own page
      */
     public static function for_question( $question, array $user_turns = array() ) {
-        $none = array( 'events' => array(), 'candidates' => array(), 'calendar' => null, 'note' => '' );
+        $none = array( 'events' => array(), 'candidates' => array(), 'calendar' => null, 'note' => '', 'organizers' => array() );
         if ( ! self::available() ) {
             return $none;
         }
@@ -146,6 +149,40 @@ class SFAF_Chat_Events {
         }
 
         $picked = $match['events'];
+
+        /*
+         * A topic matched and no window was named: show what is coming up this week
+         * and next week, every date, soonest first. Not one series' next date, which
+         * may be weeks out while the same program meets twice this week. If the
+         * program has nothing in those two weeks, fall back to the next dates.
+         */
+        if ( ! $general && null === $window ) {
+            $two   = self::two_weeks();
+            $soon  = array_values( array_filter( $picked, function ( $e ) use ( $two ) {
+                return $e['date'] >= $two['from'] && $e['date'] <= $two['to'];
+            } ) );
+            $organizers = self::organizers( array() !== $soon ? $soon : $picked, $match );
+            if ( array() !== $soon ) {
+                return array(
+                    'events'     => self::to_occurrences( $soon, self::WINDOW_SENT ),
+                    'candidates' => array(),
+                    'calendar'   => self::calendar_record(),
+                    'note'       => 'Matched to the question by ' . $match['why'] . '. These are ALL the matching events '
+                        . $two['label'] . ', every date, soonest first' . ( count( $soon ) > self::WINDOW_SENT ? ' (the first ' . self::WINDOW_SENT . ')' : '' )
+                        . '. List them in this order.',
+                    'organizers' => $organizers,
+                );
+            }
+            return array(
+                'events'     => self::to_records( $picked, self::MAX_SENT, $all ),
+                'candidates' => array(),
+                'calendar'   => self::calendar_record(),
+                'note'       => 'Matched to the question by ' . $match['why'] . '. None of these is ' . $two['label']
+                    . '; these are the next dates, soonest first.',
+                'organizers' => $organizers,
+            );
+        }
+
         $window_note = '';
         if ( null !== $window ) {
             $picked = array_values( array_filter( $picked, function ( $e ) use ( $window ) {
@@ -166,13 +203,73 @@ class SFAF_Chat_Events {
             }
         }
 
-        $records = self::to_records( $picked, $general ? self::GENERAL_SENT : self::MAX_SENT, $all );
+        $records = ( ! $general && null !== $window )
+            ? self::to_occurrences( $picked, self::WINDOW_SENT )
+            : self::to_records( $picked, $general ? self::GENERAL_SENT : self::MAX_SENT, $all );
 
         $note = $general
             ? 'Not matched to a topic: these are simply the next events on the calendar.'
             : 'Matched to the question by ' . $match['why'] . '.';
 
-        return array( 'events' => $records, 'candidates' => array(), 'calendar' => self::calendar_record(), 'note' => $note . $window_note );
+        return array(
+            'events'     => $records,
+            'candidates' => array(),
+            'calendar'   => self::calendar_record(),
+            'note'       => $note . $window_note,
+            'organizers' => $general ? array() : self::organizers( $picked, $match ),
+        );
+    }
+
+    /** Today through the Sunday after next, in the site timezone. */
+    private static function two_weeks() {
+        $now    = new DateTimeImmutable( 'now', wp_timezone() );
+        $sunday = 7 === (int) $now->format( 'N' ) ? $now : $now->modify( 'next sunday' );
+        return array(
+            'from'  => $now->format( 'Y-m-d' ),
+            'to'    => $sunday->modify( '+7 days' )->format( 'Y-m-d' ),
+            'label' => 'this week and next week',
+        );
+    }
+
+    /**
+     * Organizer names of these events, most relevant first: organizers the question
+     * named come first, then by how many of the events each runs. Used only to find
+     * the program's own page; never shown as a claim.
+     */
+    private static function organizers( array $events, array $match ) {
+        $count = array();
+        foreach ( $events as $e ) {
+            foreach ( (array) ( $e['terms']['uc_organizer'] ?? array() ) as $name ) {
+                $count[ $name ] = ( $count[ $name ] ?? 0 ) + 1;
+            }
+        }
+        arsort( $count );
+        $named = array_values( array_intersect( array_keys( $count ), (array) ( $match['hit_names'] ?? array() ) ) );
+        return array_values( array_unique( array_merge( $named, array_keys( $count ) ) ) );
+    }
+
+    /**
+     * Every date of these events, soonest first, capped at $limit. The first date of
+     * a series is a full record; its later dates are short (title, date, labels),
+     * because the model already has the details once.
+     */
+    private static function to_occurrences( array $events, $limit ) {
+        $seen = array();
+        $out  = array();
+        foreach ( $events as $e ) {
+            $repeat = $e['series'] && isset( $seen[ $e['series'] ] );
+            $rec    = self::record( $e, array(), $repeat );
+            if ( null !== $rec ) {
+                $out[] = $rec;
+                if ( $e['series'] ) {
+                    $seen[ $e['series'] ] = true;
+                }
+            }
+            if ( count( $out ) >= $limit ) {
+                break;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -411,7 +508,11 @@ class SFAF_Chat_Events {
             foreach ( array_keys( $hit_terms ) as $key ) {
                 $why[] = '"' . $names[ $key ] . '"';
             }
-            return array( 'events' => self::best( $all, $scored ), 'why' => 'calendar label ' . implode( ', ', array_unique( $why ) ) );
+            return array(
+                'events'    => self::best( $all, $scored ),
+                'why'       => 'calendar label ' . implode( ', ', array_unique( $why ) ),
+                'hit_names' => array_values( array_unique( array_intersect_key( $names, $hit_terms ) ) ),
+            );
         }
 
         /* ---- 2. title, then description ---- */

@@ -242,7 +242,7 @@ class SFAF_Chat_Admin {
 
                 <h2>Logging</h2>
                 <p><label><input type="checkbox" name="raw_questions" value="1" <?php checked( ! empty( $settings['raw_questions'] ) ); ?>>
-                    Log raw question text. For internal testing only. It records every question asked on any page with the script tag, so turn it off before the tag goes on a page real visitors can reach.</label></p>
+                    Log raw question and answer text, to review full exchanges on the Dashboard. For internal testing only. It records every question asked on any page with the script tag, and the assistant's answer, so turn it off before the tag goes on a page real visitors can reach. Still no IP address, user or session; rows are deleted after 60 days.</label></p>
 
                 <?php submit_button( 'Save settings' ); ?>
             </form>

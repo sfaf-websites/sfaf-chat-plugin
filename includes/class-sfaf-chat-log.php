@@ -5,8 +5,10 @@
  *
  * WHAT IS RECORDED: time, topic, in_scope, flag, which record id was linked, which
  * pinned answer was used, and how the call went: HTTP status, model and number of
- * attempts. Question text only while raw logging is on, which
- * is internal testing only (SFAF_Chat_Settings::log_raw_questions()).
+ * attempts. Question AND answer text only while raw logging is on, which is for
+ * reviewing exchanges during testing (SFAF_Chat_Settings::log_raw_questions()).
+ * The answer is what the visitor was shown, after any pinned answer. Its only
+ * personal content is what a visitor typed and the assistant echoed.
  *
  * WHAT IS DELIBERATELY *NOT* RECORDED: no IP address, no user id, no session id,
  * no cookie, no user agent, and no thread identifier. Rows cannot be tied to a
@@ -49,6 +51,7 @@ class SFAF_Chat_Log {
   model varchar(64) DEFAULT NULL,
   attempts tinyint(3) unsigned DEFAULT NULL,
   question text DEFAULT NULL,
+  answer text DEFAULT NULL,
   PRIMARY KEY  (id),
   KEY ts (ts)
 ) $charset;" );
@@ -61,12 +64,13 @@ class SFAF_Chat_Log {
     }
 
     /**
-     * @param array $entry topic, in_scope, flag, link, pin, http, model, attempts, question.
+     * @param array $entry topic, in_scope, flag, link, pin, http, model, attempts, question, answer.
      */
     public static function write( array $entry ) {
         global $wpdb;
 
         $in_scope = $entry['in_scope'] ?? null;
+        $raw      = SFAF_Chat_Settings::log_raw_questions();
 
         $row = array(
             'ts'       => gmdate( 'Y-m-d H:i:s' ),
@@ -78,7 +82,8 @@ class SFAF_Chat_Log {
             'http'     => isset( $entry['http'] ) ? (int) $entry['http'] : null,
             'model'    => $entry['model'] ?? null,
             'attempts' => isset( $entry['attempts'] ) ? (int) $entry['attempts'] : null,
-            'question' => SFAF_Chat_Settings::log_raw_questions() ? (string) ( $entry['question'] ?? '' ) : null,
+            'question' => $raw ? (string) ( $entry['question'] ?? '' ) : null,
+            'answer'   => $raw && isset( $entry['answer'] ) ? (string) $entry['answer'] : null,
         );
 
         $suppress = $wpdb->suppress_errors( true );
@@ -113,7 +118,7 @@ class SFAF_Chat_Log {
         $cutoff = gmdate( 'Y-m-d H:i:s', time() - ( (int) $days * DAY_IN_SECONDS ) );
         $table  = self::table();
         $rows   = $wpdb->get_results(
-            $wpdb->prepare( "SELECT ts, topic, in_scope, flag, link, pin, http, model, attempts, question FROM $table WHERE ts >= %s ORDER BY ts ASC", $cutoff ),
+            $wpdb->prepare( "SELECT ts, topic, in_scope, flag, link, pin, http, model, attempts, question, answer FROM $table WHERE ts >= %s ORDER BY ts ASC", $cutoff ),
             ARRAY_A
         );
         return is_array( $rows ) ? $rows : array();

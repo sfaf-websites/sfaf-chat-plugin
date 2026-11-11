@@ -42,18 +42,24 @@ class SFAF_Chat_Dashboard {
         $topics   = array();
         $hours    = array_fill( 0, 24, 0 );
         $flags    = array( 'personal_advice' => 0, 'out_of_scope' => 0, 'crisis' => 0 );
-        $queue    = array();
-        $raw_seen = false;
+        $queue     = array();
+        $exchanges = array();   // rows with question text: raw logging was on
+        $raw_seen  = false;
 
         foreach ( $rows as $r ) {
             $flag = $r['flag'] ?? null;
+            $when = ( new DateTimeImmutable( (string) $r['ts'], $utc ) )->setTimezone( $tz );
+
+            if ( null !== ( $r['question'] ?? null ) ) {
+                $raw_seen      = true;
+                $r['_when']    = $when;
+                $exchanges[]   = $r;
+            }
             if ( 'api_error' === $flag || 'parse_error' === $flag ) {
                 $errors++;
                 continue;
             }
             $total++;
-
-            $when = ( new DateTimeImmutable( (string) $r['ts'], $utc ) )->setTimezone( $tz );
 
             $topic = is_string( $r['topic'] ?? null ) && '' !== $r['topic'] ? $r['topic'] : 'other';
             $topics[ $topic ] = ( $topics[ $topic ] ?? 0 ) + 1;
@@ -72,13 +78,11 @@ class SFAF_Chat_Dashboard {
             } else {
                 $answered++;
             }
-            if ( null !== ( $r['question'] ?? null ) ) {
-                $raw_seen = true;
-            }
         }
 
         arsort( $topics );
-        $queue = array_slice( array_reverse( $queue ), 0, 200 );
+        $queue     = array_slice( array_reverse( $queue ), 0, 200 );
+        $exchanges = array_slice( array_reverse( $exchanges ), 0, 200 );
 
         $max_topic = $topics ? max( $topics ) : 0;
         $max_hour  = max( $hours ) ?: 0;
@@ -96,7 +100,7 @@ class SFAF_Chat_Dashboard {
         </div>
 
         <?php if ( $raw_seen ) : ?>
-            <div class="banner" role="note"><strong>Raw question text is in these logs.</strong>
+            <div class="banner" role="note"><strong>Raw question and answer text is in these logs.</strong>
                 That's expected during internal testing only. Turn it off in Settings before the script tag goes on a page real visitors can reach. Old rows are removed after 60 days.</div>
         <?php endif; ?>
 
@@ -185,6 +189,48 @@ class SFAF_Chat_Dashboard {
                                     } else {
                                         echo '<span class="nq">not logged (topic-only mode)</span>';
                                     }
+                                ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </section>
+
+        <section class="card" aria-labelledby="t-exchanges">
+            <h2 id="t-exchanges">Recent exchanges</h2>
+            <p class="sub">Each question with the answer the visitor was shown, newest first<?php echo 200 === count( $exchanges ) ? ' (latest 200)' : ''; ?>. Only recorded while raw logging is on in Settings. Each row stands alone: rows are never linked into conversations.</p>
+            <?php if ( ! $exchanges ) : ?>
+                <p class="empty">No exchanges recorded in this range. Turn on raw logging in Settings to review them.</p>
+            <?php else : ?>
+                <table class="exchanges">
+                    <thead><tr><th>When (Pacific)</th><th>Question</th><th>Answer</th><th>Details</th></tr></thead>
+                    <tbody>
+                        <?php foreach ( $exchanges as $r ) : ?>
+                            <tr>
+                                <td class="when"><?php echo esc_html( $r['_when']->format( 'M j, g:i a' ) ); ?></td>
+                                <td><span class="q"><?php echo esc_html( (string) $r['question'] ); ?></span></td>
+                                <td><?php
+                                    if ( null !== ( $r['answer'] ?? null ) ) {
+                                        echo '<span class="a">' . esc_html( (string) $r['answer'] ) . '</span>';
+                                    } elseif ( 'api_error' === ( $r['flag'] ?? null ) ) {
+                                        echo '<span class="nq">no answer: the model could not be reached</span>';
+                                    } else {
+                                        echo '<span class="nq">not recorded</span>';
+                                    }
+                                ?></td>
+                                <td class="meta"><?php
+                                    $bits = array( (string) ( $r['topic'] ?? 'other' ) );
+                                    if ( ! empty( $r['flag'] ) ) {
+                                        $bits[] = 'flag: ' . $r['flag'];
+                                    }
+                                    if ( ! empty( $r['link'] ) ) {
+                                        $bits[] = 'link: ' . $r['link'];
+                                    }
+                                    if ( ! empty( $r['pin'] ) ) {
+                                        $bits[] = 'pinned answer';
+                                    }
+                                    echo esc_html( implode( ' · ', $bits ) );
                                 ?></td>
                             </tr>
                         <?php endforeach; ?>

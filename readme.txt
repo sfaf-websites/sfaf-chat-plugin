@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.5.0
+Stable tag: 1.6.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,18 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.6.0 =
+* Events: when a question matches a program's events, the assistant lists every date this
+  week and next week, soonest first, instead of one next date that may be weeks out.
+* Beside that list it links the program's own page (for example Programa Latino), found by
+  matching the event organizer to the site's pages. With no such page, it links the events
+  calendar as before.
+* The assistant prefers a program's or place's own page over a broader one that only
+  mentions it: "Strut hours" links the Strut page, not Locations & Hours.
+* Raw logging now records the answer the visitor was shown as well as the question, and the
+  Dashboard shows both under Recent exchanges. Same toggle, same 60-day cleanup, still no
+  IP address, user or session.
 
 = 1.5.0 =
 * Better matching for pages, blog posts and events. Words are compared by their stem, so
