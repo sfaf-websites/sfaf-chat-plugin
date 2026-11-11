@@ -562,7 +562,10 @@
     }
 
     var body = el('div', 'sfaf-card-body');
-    body.appendChild(el('div', 'sfaf-card-kind', card.type === 'event' ? 'Event' : 'Article'));
+    // The server names the kind ("Blog post" for SFAF's blog), so a post never looks
+    // like an official page. textContent, like everything else here.
+    var kind = typeof card.kind === 'string' && card.kind ? card.kind : (card.type === 'event' ? 'Event' : 'Article');
+    body.appendChild(el('div', 'sfaf-card-kind', kind));
     body.appendChild(el('div', 'sfaf-card-title', card.title || ''));
     if (card.subtitle) body.appendChild(el('div', 'sfaf-card-sub', card.subtitle));
     var cta = el('a', 'sfaf-card-cta', card.cta || (card.type === 'event' ? 'Event details' : 'Read more'));

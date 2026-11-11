@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.3.0
+Stable tag: 1.4.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,15 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.4.0 =
+* Blog posts can now be used in answers, as a lower tier than website pages. Pages stay
+  the official source: a post is used only when it adds something the pages don't, and
+  the assistant says it is a blog post and points to it rather than restating it.
+* Up to 3 matching posts are considered per question, each as a short excerpt, in their
+  own section, so they never crowd out a page.
+* A linked post shows as a card labeled "Blog post", with a "Read the blog post" button.
+* A refusal, crisis reply or personal health reply never links a blog post.
 
 = 1.3.0 =
 * Placement decides where the widget appears. It shows only on pages that carry the

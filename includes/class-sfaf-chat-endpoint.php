@@ -45,6 +45,19 @@ class SFAF_Chat_Endpoint {
     const MAX_RECORD_WORDS_SENT = 500;
 
     /*
+     * BLOG POSTS are a lower tier than pages, ranked and sent separately so they can
+     * never crowd a page out of RELATED PAGES. Only a few, and only a short excerpt
+     * of each: the model should point to a post, not recite it. A post can be old,
+     * and on health topics old can mean wrong. See also POST_DECLINE_FLAGS.
+     */
+    const POST_TOP_N          = 3;
+    const MAX_POST_WORDS_SENT = 120;
+    const POST_KIND           = 'Blog post';
+
+    // A reply the model declined (or marked crisis) never links a blog post.
+    const POST_DECLINE_FLAGS = array( 'personal_advice', 'out_of_scope', 'crisis' );
+
+    /*
      * RETRIES. Google answers 503 under load, often for a moment, so one failure must
      * not reach the visitor. Same model every time: there is deliberately no second
      * model, because a different model hasn't had its refusals tested.
@@ -325,16 +338,24 @@ class SFAF_Chat_Endpoint {
         }
 
         // Tier 2: indexed pages, pre-filtered by keyword overlap with the question.
-        // Blog posts (type "post") are indexed but excluded from answering for now.
+        // Blog posts (type "post") are ranked separately, as a lower tier: see POST_TOP_N.
         $related = array();
+        $posts   = array();
         $index   = SFAF_Chat_Core::read_json( SFAF_Chat_Core::index_path() );
         if ( isset( $index['records'] ) && is_array( $index['records'] ) ) {
-            $candidates = array_values( array_filter( $index['records'], function ( $r ) use ( $in_scope_source, $core_urls, $url_key ) {
-                return is_array( $r ) && isset( $r['id'], $r['url'] )
-                    && ( $r['type'] ?? 'page' ) !== 'post'
-                    && $in_scope_source( $r )
-                    && ! isset( $core_urls[ $url_key( $r['url'] ) ] );
-            } ) );
+            $candidates      = array();
+            $post_candidates = array();
+            foreach ( $index['records'] as $r ) {
+                if ( ! is_array( $r ) || ! isset( $r['id'], $r['url'] ) || ! $in_scope_source( $r )
+                    || isset( $core_urls[ $url_key( $r['url'] ) ] ) ) {
+                    continue;
+                }
+                if ( 'post' === ( $r['type'] ?? 'page' ) ) {
+                    $post_candidates[] = $r;
+                } else {
+                    $candidates[] = $r;
+                }
+            }
 
             // The live question counts fully; the last two user turns count half,
             // so "what about walk-ins?" still pulls in pages about the earlier subject.
@@ -349,6 +370,7 @@ class SFAF_Chat_Endpoint {
             }
 
             $related = SFAF_Chat_Core::rank_records( $candidates, $query, self::PREFILTER_TOP_N );
+            $posts   = SFAF_Chat_Core::rank_records( $post_candidates, $query, self::POST_TOP_N );
         }
 
         // Tier 3: live events from the calendar on this site, matched to the question.
@@ -369,7 +391,7 @@ class SFAF_Chat_Endpoint {
 
         // Every record the model can see, and therefore the ONLY ids it can link to.
         $record_map = array();
-        foreach ( array_merge( $core, $related, $events, null === $calendar ? array() : array( $calendar ) ) as $r ) {
+        foreach ( array_merge( $core, $related, $posts, $events, null === $calendar ? array() : array( $calendar ) ) as $r ) {
             $record_map[ $r['id'] ] = $r;
         }
 
@@ -403,6 +425,21 @@ class SFAF_Chat_Endpoint {
             return array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), $out );
         };
 
+        // A post goes to the model as a short excerpt with its summary, never in full.
+        $for_post = function ( array $r ) {
+            $words = preg_split( '/\s+/u', (string) ( $r['text'] ?? '' ), -1, PREG_SPLIT_NO_EMPTY );
+            $text  = implode( ' ', array_slice( $words, 0, self::MAX_POST_WORDS_SENT ) )
+                . ( count( $words ) > self::MAX_POST_WORDS_SENT ? ' …' : '' );
+            return array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), array(
+                'id'      => $r['id'],
+                'title'   => (string) ( $r['title'] ?? '' ),
+                'source'  => (string) ( $r['source'] ?? '' ),
+                'type'    => 'post',
+                'summary' => (string) ( $r['og']['description'] ?? '' ),
+                'excerpt' => $text,
+            ) );
+        };
+
         $enc   = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
         $today = wp_date( 'l, F j, Y', null, SFAF_Chat_Core::timezone() );
 
@@ -419,6 +456,14 @@ class SFAF_Chat_Endpoint {
                 . "Additional SFAF pages that matched the question. Same rules apply: answer only "
                 . "from what they say, and link by id.\n"
                 . json_encode( array_map( $for_model, $related ), $enc );
+        }
+
+        if ( array() !== $posts ) {
+            $system_instruction .= "\n\n## BLOG POSTS (lower priority, pointer only)\n"
+                . "SFAF blog posts that matched the question. They are NOT official or current fact, and "
+                . "older ones may be out of date. Use one only when the sections above do not cover the "
+                . "question, and then point to it rather than recite it. Only an excerpt is shown.\n"
+                . json_encode( array_map( $for_post, $posts ), $enc );
         }
 
         $calendar_hint = null === $calendar ? 'point to the events page'
@@ -565,6 +610,15 @@ class SFAF_Chat_Endpoint {
         $answered_in_scope = (bool) ( $parsed['in_scope'] ?? true );
         $answer            = (string) $parsed['answer'];
 
+        // A declined or crisis reply never points to a blog post: a post is a story or a
+        // perspective, not a next step, and it may be out of date. The answer still goes.
+        if ( null !== $link_id && 'post' === ( $record_map[ $link_id ]['type'] ?? '' )
+            && ( ! $answered_in_scope || in_array( $flag, self::POST_DECLINE_FLAGS, true ) ) ) {
+            $link_id = null;
+            $card    = null;
+            $link    = null;
+        }
+
         /*
          * PINNED ANSWERS. Only after the model has judged the message, so a crisis
          * or a personal question that happens to contain the trigger words still
@@ -675,19 +729,23 @@ class SFAF_Chat_Endpoint {
 
     /* ============================ LINKS + CARDS =========================== */
 
-    /** Plain link button: {label, url}. */
+    /** Plain link button: {label, url}. A blog post says so in its label. */
     private static function link_for( array $r ) {
+        $label = SFAF_Chat_Core::no_em_dash( $r['title'] ?? $r['id'] );
+        if ( 'post' === ( $r['type'] ?? '' ) ) {
+            $label = self::POST_KIND . ': ' . $label;
+        }
         return array(
-            'label' => SFAF_Chat_Core::no_em_dash( $r['title'] ?? $r['id'] ),
+            'label' => $label,
             'url'   => (string) $r['url'],
         );
     }
 
     /**
      * Card for card-worthy records (events and articles) from STORED fields only.
-     * Returns null for ordinary pages, which get a plain link.
-     *
-     * Only events reach here today: blog posts are filtered out before the model.
+     * Returns null for ordinary pages, which get a plain link. A blog post is an
+     * "article" card whose kind line reads "Blog post", so it is never mistaken for
+     * an official page.
      */
     private static function card_for( array $r ) {
         $type = $r['type'] ?? 'page';
@@ -717,7 +775,8 @@ class SFAF_Chat_Endpoint {
             // SFAF domains only (sfaf.org, *.sfaf.org, tweaker.org), else no image.
             'image_url' => SFAF_Chat_Core::is_sfaf_url( $image ) ? $image : null,
             'url'       => (string) $r['url'],
-            'cta'       => 'event' === $type ? 'Event details' : 'Read article',
+            'cta'       => 'event' === $type ? 'Event details' : 'Read the blog post',
+            'kind'      => 'event' === $type ? 'Event' : self::POST_KIND,
         );
     }
 }
