@@ -97,7 +97,7 @@ class SFAF_Chat_Dashboard {
 
         <?php if ( $raw_seen ) : ?>
             <div class="banner" role="note"><strong>Raw question text is in these logs.</strong>
-                That's expected during internal testing. It stops automatically in Public mode, and old rows are removed after 60 days.</div>
+                That's expected during internal testing only. Turn it off in Settings before the script tag goes on a page real visitors can reach. Old rows are removed after 60 days.</div>
         <?php endif; ?>
 
         <section class="tiles" aria-label="Summary">

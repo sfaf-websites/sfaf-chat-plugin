@@ -26,8 +26,8 @@
 
   var script = document.currentScript;
 
-  // Set by the plugin ahead of this script: {proxy, nonce?}. The nonce appears only
-  // in admins-only test mode, on a page served to a logged-in administrator.
+  // Set by the stable script URL ahead of this script: {proxy, theme}. No nonce and
+  // no cookies: every page reaches the endpoint the same way, by origin.
   var CONFIG = window.sfafChatConfig || {};
 
   // Absolute: the widget runs on sfaf.org but the endpoint is on resources.sfaf.org.
@@ -689,13 +689,12 @@
 
   function requestOptions(payload, signal) {
     var headers = { 'Content-Type': 'application/json' };
-    if (CONFIG.nonce) headers['X-WP-Nonce'] = CONFIG.nonce;
     return {
       method: 'POST',
       headers: headers,
       body: JSON.stringify(payload),
       signal: signal,
-      credentials: CONFIG.nonce ? 'same-origin' : 'omit',
+      credentials: 'omit',
       mode: 'cors'
     };
   }

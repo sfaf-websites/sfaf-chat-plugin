@@ -137,22 +137,13 @@ class SFAF_Chat_Admin {
             'model'       => $post['model'] ?? '',
         ) );
 
-        $mode = in_array( $post['mode'] ?? '', array( SFAF_Chat_Settings::MODE_ADMINS, SFAF_Chat_Settings::MODE_PUBLIC ), true )
-            ? $post['mode']
+        $mode = SFAF_Chat_Settings::MODE_ON === ( $post['mode'] ?? '' )
+            ? SFAF_Chat_Settings::MODE_ON
             : SFAF_Chat_Settings::MODE_OFF;
 
-        if ( SFAF_Chat_Settings::MODE_OFF !== $mode && ! SFAF_Chat_Credentials::has( 'api_key' ) ) {
+        if ( SFAF_Chat_Settings::MODE_ON === $mode && ! SFAF_Chat_Credentials::has( 'api_key' ) ) {
             $problems[] = 'The widget stayed off because no Gemini API key is saved.';
             $mode       = SFAF_Chat_Settings::MODE_OFF;
-        }
-
-        // Public is the one setting that reaches real visitors, so it takes a
-        // deliberate second step. Saving anything else never needs it.
-        if ( SFAF_Chat_Settings::MODE_PUBLIC === $mode
-            && SFAF_Chat_Settings::MODE_PUBLIC !== SFAF_Chat_Settings::mode()
-            && empty( $post['confirm_public'] ) ) {
-            $problems[] = 'The widget was not made public. Tick the confirmation box to go public.';
-            $mode       = SFAF_Chat_Settings::mode();
         }
 
         SFAF_Chat_Settings::update( array(
@@ -201,20 +192,15 @@ class SFAF_Chat_Admin {
 
                 <h2>Widget switch</h2>
                 <fieldset class="sfaf-chat-modes">
-                    <legend class="screen-reader-text">Who can use the assistant</legend>
+                    <legend class="screen-reader-text">Master switch</legend>
                     <label><input type="radio" name="mode" value="off" <?php checked( $mode, 'off' ); ?>>
-                        <strong>Off.</strong> Nobody can use it. The widget does not load, and the endpoint refuses every question.</label>
-                    <label><input type="radio" name="mode" value="admins" <?php checked( $mode, 'admins' ); ?>>
-                        <strong>Admins-only test mode.</strong> The widget appears only for logged-in administrators, on this site's own pages. Visitors see nothing.</label>
-                    <label><input type="radio" name="mode" value="public" <?php checked( $mode, 'public' ); ?>>
-                        <strong>Public.</strong> Live for every visitor, here and on any site with the script tag.</label>
+                        <strong>Off.</strong> Off everywhere at once. The script tag loads nothing, and the endpoint refuses every question.</label>
+                    <label><input type="radio" name="mode" value="on" <?php checked( $mode, 'on' ); ?>>
+                        <strong>On.</strong> The widget appears on every page that carries the script tag, for anyone who visits it, and nowhere else.</label>
                 </fieldset>
-                <?php if ( 'public' !== $mode ) : ?>
-                    <p class="sfaf-chat-confirm">
-                        <label><input type="checkbox" name="confirm_public" value="1">
-                            Going public: I confirm the Gemini key is on a paid plan, the clinical knowledge has been reviewed, and SFAF privacy sign-off is done.</label>
-                    </p>
-                <?php endif; ?>
+                <p class="description">This switch never decides where the widget shows. The script tag does: the plugin adds the widget to no page by itself, not even on this site. A change here reaches open pages within 5 minutes; the endpoint obeys it at once.</p>
+                <p class="description">Script tag: <code>&lt;script src="<?php echo esc_html( SFAF_Chat_Widget::stable_url() ); ?>" defer&gt;&lt;/script&gt;</code></p>
+                <p class="description">Before the tag goes on a page real visitors can reach: the Gemini key must be on a paid plan, the clinical knowledge reviewed, and SFAF privacy sign-off done.</p>
 
                 <h2>Gemini</h2>
                 <table class="form-table" role="presentation">
@@ -256,7 +242,7 @@ class SFAF_Chat_Admin {
 
                 <h2>Logging</h2>
                 <p><label><input type="checkbox" name="raw_questions" value="1" <?php checked( ! empty( $settings['raw_questions'] ) ); ?>>
-                    Log raw question text. For internal testing only. It has no effect in Public mode, so question text is never stored for real visitors.</label></p>
+                    Log raw question text. For internal testing only. It records every question asked on any page with the script tag, so turn it off before the tag goes on a page real visitors can reach.</label></p>
 
                 <?php submit_button( 'Save settings' ); ?>
             </form>

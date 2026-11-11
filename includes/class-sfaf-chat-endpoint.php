@@ -21,10 +21,9 @@
  * Response: { ok, answer, link:{label,url}|null,
  *             card:{type,title,subtitle,image_url,url,cta}|null, in_scope }
  *
- * NO NONCE ON THE PUBLIC PATH, DELIBERATELY. The page cache would serve visitors a
- * stale nonce. The route is public by design; the widget switch and the origin
- * check below are what gate it. Admins-only mode does use a nonce, because pages
- * for logged-in users are not cached.
+ * NO NONCE, DELIBERATELY. The page cache would serve visitors a stale nonce. The
+ * route is public by design; the widget switch and the origin check below are
+ * what gate it. Every page reaches it the same way, cookies omitted.
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
@@ -202,7 +201,7 @@ class SFAF_Chat_Endpoint {
      * and no model is called.
      */
     public function starters( WP_REST_Request $request ) {
-        if ( ! SFAF_Chat_Settings::mode_allows_ask() ) {
+        if ( ! SFAF_Chat_Settings::is_on() ) {
             return $this->fail( 'The assistant is not available.', 403 );
         }
         if ( ! self::origin_allowed( get_http_origin() ) ) {
@@ -225,7 +224,7 @@ class SFAF_Chat_Endpoint {
     public function ask( WP_REST_Request $request ) {
 
         // The switch. Off means refused for everybody, whatever the page does.
-        if ( ! SFAF_Chat_Settings::mode_allows_ask() ) {
+        if ( ! SFAF_Chat_Settings::is_on() ) {
             return $this->fail( 'The assistant is not available.', 403 );
         }
 

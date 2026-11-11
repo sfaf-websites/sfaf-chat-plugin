@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.2.0
+Stable tag: 1.3.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -25,12 +25,23 @@ give individual medical or personal advice, and it hands off to a real person.
 
 1. Upload the release zip on the Plugins screen and activate it.
 2. Go to SFAF Chat > Settings, and enter the API key and the index token.
-3. Set the widget switch to admins-only and test on this site's pages.
+3. Turn the widget switch on, then place the script tag on the pages that should show it.
+   The plugin adds the widget to no page by itself.
 
 Later releases appear on the Plugins screen as a normal update. To check at once,
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.3.0 =
+* Placement decides where the widget appears. It shows only on pages that carry the
+  script tag, and the plugin no longer adds it to this site's pages by itself.
+* The widget switch is now simply On or Off, a master switch for every page at once.
+  Admins-only test mode and the Public confirmation are gone.
+* After updating, a site that was in Public is On. A site that was in admins-only test
+  mode is Off until someone turns it on.
+* Raw question logging now follows its toggle whenever the switch is on. Turn it off
+  before the script tag goes on a page real visitors can reach.
 
 = 1.2.0 =
 * Live events. The assistant reads upcoming events straight from the SFAF Calendar on

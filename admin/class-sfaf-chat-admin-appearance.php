@@ -192,7 +192,7 @@ class SFAF_Chat_Admin_Appearance {
                             <ul><?php foreach ( $problems as $problem ) { echo '<li>' . esc_html( $problem ) . '</li>'; } ?></ul>
                         <?php endif; ?>
                     </div>
-                    <p class="description">A saved change reaches sfaf.org within 5 minutes. Cached pages on this site show it once their page cache is cleared.</p>
+                    <p class="description">A saved change reaches every page with the script tag within 5 minutes.</p>
                     <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" onsubmit="return confirm('Reset every appearance setting to the SFAF brand defaults?');">
                         <input type="hidden" name="action" value="<?php echo esc_attr( self::RESET_ACTION ); ?>">
                         <?php wp_nonce_field( self::RESET_ACTION ); ?>
