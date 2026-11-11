@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.4.0
+Stable tag: 1.5.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,24 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.5.0 =
+* Better matching for pages, blog posts and events. Words are compared by their stem, so
+  "voting" meets "vote", and a question also looks for common synonyms ("props" for
+  propositions and ballot measures, "Spanish" for español and Latino). Rare, telling words
+  now count for more than common ones.
+* Blog posts: the excerpt the assistant sees is the part of the post most about the
+  question, not its opening, and up to 7 more matching posts are offered by title.
+* The index now keeps up to 900 words of each post (was 400). Posts are re-indexed on the
+  next indexer run automatically.
+* Events: when no event matches the words of a question about events, the assistant gets
+  a short list of upcoming events with their calendar labels and judges for itself whether
+  one fits. It describes events by their labels and never claims a language the calendar
+  doesn't state.
+* When a blog post covers the subject, the assistant points to it rather than saying it
+  has no details.
+* The Ask SFAF button now has a defined edge and a soft shadow, so it stands out on dark
+  backgrounds as well as light ones.
 
 = 1.4.0 =
 * Blog posts can now be used in answers, as a lower tier than website pages. Pages stay

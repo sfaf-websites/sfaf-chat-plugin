@@ -3,7 +3,7 @@
  * Plugin Name: SFAF Chat
  * Plugin URI: https://sfaf.org
  * Description: The San Francisco AIDS Foundation website assistant. Answers questions about SFAF services from curated, staff-reviewed knowledge, with guardrails, de-identified analytics, and staff-approved pinned answers.
- * Version: 1.4.0
+ * Version: 1.5.0
  * Author: San Francisco AIDS Foundation
  * Author URI: https://sfaf.org
  * License: GPL v2 or later
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'SFAF_CHAT_VERSION', '1.4.0' );
+define( 'SFAF_CHAT_VERSION', '1.5.0' );
 define( 'SFAF_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SFAF_CHAT_URL', plugin_dir_url( __FILE__ ) );
 define( 'SFAF_CHAT_FILE', __FILE__ );

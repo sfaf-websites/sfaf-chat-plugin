@@ -129,6 +129,11 @@
     '  display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;',
     '  background:var(--sfaf-dark);color:var(--sfaf-on-dark);border:0;',
     '  border-left:4px solid var(--sfaf-accent);padding:0 14px 0 11px;font-size:13px;font-weight:600;',
+    // Its edge must show on ANY page: a black footer as much as white content. A thin
+    // accent ring inside the edge carries it on dark backgrounds, a faint light hairline
+    // just outside keeps it even if the accent is set dark, and a soft shadow lifts it
+    // off light ones. Shadows, not borders, so the size matched to Weglot is unchanged.
+    '  box-shadow:inset 0 0 0 1px var(--sfaf-accent),0 0 0 1px rgba(255,255,255,.4),0 2px 12px rgba(0,0,0,.28);',
     '  transition:background .16s ease;}',
     '#sfaf-chat .sfaf-launcher:hover{background:var(--sfaf-dark-hover);}',
     // Inset, because the page behind may be white and the bottom edge would clip it.

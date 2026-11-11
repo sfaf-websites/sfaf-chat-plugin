@@ -23,7 +23,7 @@
  *   - the lock is uploads/sfaf-chat/indexer.lock
  *
  * Records use the same schema as data/knowledge-base.json:
- *   id, title, url, source, type, keywords, og{title,description,image}, text, lastmod
+ *   id, title, url, source, type, keywords, og{title,description,image}, text, lastmod, indexed, cap
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
@@ -37,7 +37,7 @@ class SFAF_Chat_Indexer {
     const FETCH_TIMEOUT    = 15;
     const MAX_PAGE_BYTES   = 3 * 1024 * 1024;
     const MAX_TEXT_WORDS   = 2000;        // per page
-    const MAX_POST_WORDS   = 400;         // per post (pointer-only: enough to match on)
+    const MAX_POST_WORDS   = 900;         // per post: enough to match on and point to, never the whole post
     const POLITE_DELAY_MS  = 250;         // pause between page fetches
     const USER_AGENT       = 'SFAF-Chat-Indexer/1.0 (+https://resources.sfaf.org/chat/)';
 
@@ -232,6 +232,8 @@ class SFAF_Chat_Indexer {
                     || ($prev['lastmod'] ?? null) !== $lastmod
                     || ($prev['source'] ?? null) !== $source
                     || ($prev['type'] ?? null) !== $type
+                    // stored under a different word cap (the cap changed): fetch again once
+                    || ($prev['cap'] ?? null) !== self::word_cap($type)
                     // no lastmod in the sitemap: refresh weekly
                     || ($lastmod === null && (time() - strtotime((string)($prev['indexed'] ?? '1970-01-01'))) > 7 * 86400);
 
@@ -368,7 +370,7 @@ class SFAF_Chat_Indexer {
             return 'no content extracted';
         }
 
-        $maxWords = ($item['type'] === 'post') ? self::MAX_POST_WORDS : self::MAX_TEXT_WORDS;
+        $maxWords = self::word_cap($item['type']);
 
         return [
             'id'       => self::record_id($item['source'], $item['url']),
@@ -381,7 +383,17 @@ class SFAF_Chat_Indexer {
             'text'     => self::truncate_words($parsed['text'], $maxWords),
             'lastmod'  => $item['lastmod'],
             'indexed'  => gmdate('c'),
+            'cap'      => $maxWords,
         ];
+    }
+
+    /**
+     * Words kept per record of this type. Stored on each record as "cap", so that
+     * changing a cap re-indexes the affected records on the next run by itself.
+     */
+    private static function word_cap(string $type): int
+    {
+        return $type === 'post' ? self::MAX_POST_WORDS : self::MAX_TEXT_WORDS;
     }
 
     /**

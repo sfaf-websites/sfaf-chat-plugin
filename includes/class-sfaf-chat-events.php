@@ -24,8 +24,14 @@
  * "Today"/"Tomorrow" label. The model receives a finished list and is told not to
  * compare dates.
  *
- * WHEN THE MATCH IS UNCERTAIN, NO EVENT IS SENT. The model gets the calendar page
- * instead, so it points there rather than offering a wrong event as a right one.
+ * MATCHING, THEN A SHORT LIST. Keywords first: calendar labels, then titles and
+ * descriptions, with the question's synonyms counted too (SFAF_Chat_Core::SYNONYMS,
+ * so "Spanish" meets "Programa Latino"). When a message is about events, names a
+ * topic, and still nothing matches, the model gets a short, separate list of the
+ * next upcoming events in the window (titles and calendar labels only) as
+ * CANDIDATES, and decides itself whether one is clearly what was asked. Keyword
+ * overlap can't see that connection; the model can. The candidates are marked as
+ * unmatched, and the prompt holds it to offering one only when it clearly fits.
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
@@ -41,6 +47,7 @@ class SFAF_Chat_Events {
     const GENERAL_SENT = 5;     // "what's coming up?" with no topic
     const ALSO_ON      = 3;     // later dates of a series, listed on its next one
     const DESC_WORDS   = 120;
+    const CANDIDATES   = 20;    // unmatched short list: series, next date each
 
     // Words that make a message about events. Compared after SFAF_Chat_Core::tokenize(),
     // which folds a trailing s, so both spellings are listed where that matters.
@@ -79,10 +86,13 @@ class SFAF_Chat_Events {
      * @return array{events:array,calendar:array|null,note:string}
      *   events    records of type "event", ready for the record map
      *   calendar  the calendar page record, or null when events are irrelevant
+     *   candidates  short records (title, date, labels), sent only when the message
+     *               is about events, names a topic, and nothing matched. The model
+     *               picks from these, or none.
      *   note      one line for the model saying how the list was chosen
      */
     public static function for_question( $question, array $user_turns = array() ) {
-        $none = array( 'events' => array(), 'calendar' => null, 'note' => '' );
+        $none = array( 'events' => array(), 'candidates' => array(), 'calendar' => null, 'note' => '' );
         if ( ! self::available() ) {
             return $none;
         }
@@ -94,7 +104,7 @@ class SFAF_Chat_Events {
         $all = self::upcoming();
         if ( array() === $all ) {
             return $eventish
-                ? array( 'events' => array(), 'calendar' => self::calendar_record(), 'note' => 'There are no upcoming events on the calendar right now.' )
+                ? array( 'events' => array(), 'candidates' => array(), 'calendar' => self::calendar_record(), 'note' => 'There are no upcoming events on the calendar right now.' )
                 : $none;
         }
 
@@ -128,11 +138,7 @@ class SFAF_Chat_Events {
                 return $none;
             }
             if ( array() !== self::content_tokens( $tokens ) ) {
-                return array(
-                    'events'   => array(),
-                    'calendar' => self::calendar_record(),
-                    'note'     => 'No upcoming event clearly matches what the visitor asked about. Do not name or guess an event, date or time. Point them to the events calendar.',
-                );
+                return self::candidates( $all, $window );
             }
             // "What's coming up?" with no topic: the next events, in order.
             $general = true;
@@ -150,9 +156,10 @@ class SFAF_Chat_Events {
                 $last    = end( $all );
                 $covered = count( $all ) < self::MAX_SCAN || $last['date'] >= $window['to'];
                 return array(
-                    'events'   => array(),
-                    'calendar' => self::calendar_record(),
-                    'note'     => $covered
+                    'events'     => array(),
+                    'candidates' => array(),
+                    'calendar'   => self::calendar_record(),
+                    'note'       => $covered
                         ? 'There are no ' . ( $general ? '' : 'matching ' ) . 'events on the calendar for ' . $window['label'] . '. Say so, and point to the events calendar for other dates.'
                         : 'Point the visitor to the events calendar for ' . $window['label'] . '. Do not name or guess an event, date or time.',
                 );
@@ -165,7 +172,44 @@ class SFAF_Chat_Events {
             ? 'Not matched to a topic: these are simply the next events on the calendar.'
             : 'Matched to the question by ' . $match['why'] . '.';
 
-        return array( 'events' => $records, 'calendar' => self::calendar_record(), 'note' => $note . $window_note );
+        return array( 'events' => $records, 'candidates' => array(), 'calendar' => self::calendar_record(), 'note' => $note . $window_note );
+    }
+
+    /**
+     * Nothing matched the topic the visitor named: the next upcoming events in the
+     * window, one per series, as short candidates for the model to judge. When the
+     * window holds nothing, the server says so, as before.
+     */
+    private static function candidates( array $all, $window ) {
+        $pool = $all;
+        $when = '';
+        if ( null !== $window ) {
+            $pool = array_values( array_filter( $all, function ( $e ) use ( $window ) {
+                return $e['date'] >= $window['from'] && $e['date'] <= $window['to'];
+            } ) );
+            $when = ' ' . $window['label'];
+        }
+
+        $records = array() === $pool ? array() : self::to_records( $pool, self::CANDIDATES, $all, true );
+        if ( array() === $records ) {
+            $last    = end( $all );
+            $covered = null === $window || count( $all ) < self::MAX_SCAN || $last['date'] >= $window['to'];
+            return array(
+                'events'     => array(),
+                'candidates' => array(),
+                'calendar'   => self::calendar_record(),
+                'note'       => $covered && null !== $window
+                    ? 'There are no events on the calendar for ' . $window['label'] . '. Say so, and point to the events calendar for other dates.'
+                    : 'No upcoming event clearly matches what the visitor asked about. Do not name or guess an event, date or time. Point them to the events calendar.',
+            );
+        }
+
+        return array(
+            'events'     => array(),
+            'candidates' => $records,
+            'calendar'   => self::calendar_record(),
+            'note'       => 'No event matched the visitor\'s words, so OTHER UPCOMING EVENTS lists the next events' . $when . ' for you to judge.',
+        );
     }
 
     /* ============================== THE QUERY ============================= */
@@ -303,6 +347,12 @@ class SFAF_Chat_Events {
         $content = array_flip( self::meaningful( $tokens ) );
         if ( array() === $content ) {
             return array( 'events' => array(), 'why' => '' );
+        }
+        // The question's synonyms count as its own words ("Spanish" meets "Latino").
+        foreach ( SFAF_Chat_Core::synonyms_of( array_keys( $content ) ) as $syns ) {
+            foreach ( self::meaningful( $syns ) as $syn ) {
+                $content[ $syn ] = true;
+            }
         }
 
         /* ---- 1. taxonomy terms ---- */
@@ -477,7 +527,7 @@ class SFAF_Chat_Events {
      * Records for the model and the card, one per series (its next date, with the
      * dates after it listed), capped at $limit.
      */
-    private static function to_records( array $events, $limit, array $all ) {
+    private static function to_records( array $events, $limit, array $all, $labels_only = false ) {
         // Later dates of every series, from the full upcoming list.
         $dates_by_series = array();
         foreach ( $all as $e ) {
@@ -495,7 +545,7 @@ class SFAF_Chat_Events {
                 }
                 $seen[ $e['series'] ] = true;
             }
-            $rec = self::record( $e, $dates_by_series[ $e['series'] ] ?? array() );
+            $rec = self::record( $e, $dates_by_series[ $e['series'] ] ?? array(), $labels_only );
             if ( null !== $rec ) {
                 $out[] = $rec;
             }
@@ -506,8 +556,12 @@ class SFAF_Chat_Events {
         return $out;
     }
 
-    /** One event as a record in the shared schema, or null without an https address. */
-    private static function record( array $e, array $series_dates ) {
+    /**
+     * One event as a record in the shared schema, or null without an https address.
+     * $labels_only: for the unmatched candidate list, the model sees only the calendar
+     * labels as content (the card still gets everything).
+     */
+    private static function record( array $e, array $series_dates, $labels_only = false ) {
         $id  = $e['id'];
         $url = (string) get_permalink( $id );
         if ( ! preg_match( '#^https://#i', $url ) ) {
@@ -523,6 +577,7 @@ class SFAF_Chat_Events {
                 $facts[] = $label . ': ' . implode( ', ', $e['terms'][ $tax ] ) . '.';
             }
         }
+        $labels = implode( ' ', $facts );
         if ( function_exists( 'sfaf_event_format_line' ) ) {
             $format = self::plain( sfaf_event_format_line( $id ) );
             if ( '' !== $format ) {
@@ -580,7 +635,7 @@ class SFAF_Chat_Events {
             'date'           => $when,
             'location'       => $location,
             'location_short' => $short,
-            'content'        => trim( implode( ' ', $facts ) . ( '' !== $desc ? ' ' . $desc : '' ) ),
+            'content'        => $labels_only ? $labels : trim( implode( ' ', $facts ) . ( '' !== $desc ? ' ' . $desc : '' ) ),
             'og'             => array(
                 'title'       => $e['title'],
                 'description' => $desc,

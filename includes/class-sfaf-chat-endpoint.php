@@ -46,11 +46,14 @@ class SFAF_Chat_Endpoint {
 
     /*
      * BLOG POSTS are a lower tier than pages, ranked and sent separately so they can
-     * never crowd a page out of RELATED PAGES. Only a few, and only a short excerpt
-     * of each: the model should point to a post, not recite it. A post can be old,
-     * and on health topics old can mean wrong. See also POST_DECLINE_FLAGS.
+     * never crowd a page out of RELATED PAGES. The best few go as an excerpt, taken
+     * from where the question's words are densest in the post (not its opening);
+     * the next few as titles only, so a near miss can still be pointed to. The model
+     * should point to a post, not recite it. A post can be old, and on health
+     * topics old can mean wrong. See also POST_DECLINE_FLAGS.
      */
     const POST_TOP_N          = 3;
+    const POST_TITLES_N       = 7;
     const MAX_POST_WORDS_SENT = 120;
     const POST_KIND           = 'Blog post';
 
@@ -339,9 +342,11 @@ class SFAF_Chat_Endpoint {
 
         // Tier 2: indexed pages, pre-filtered by keyword overlap with the question.
         // Blog posts (type "post") are ranked separately, as a lower tier: see POST_TOP_N.
-        $related = array();
-        $posts   = array();
-        $index   = SFAF_Chat_Core::read_json( SFAF_Chat_Core::index_path() );
+        $related     = array();
+        $posts       = array();
+        $post_titles = array();
+        $query       = array();
+        $index       = SFAF_Chat_Core::read_json( SFAF_Chat_Core::index_path() );
         if ( isset( $index['records'] ) && is_array( $index['records'] ) ) {
             $candidates      = array();
             $post_candidates = array();
@@ -370,28 +375,32 @@ class SFAF_Chat_Endpoint {
             }
 
             $related = SFAF_Chat_Core::rank_records( $candidates, $query, self::PREFILTER_TOP_N );
-            $posts   = SFAF_Chat_Core::rank_records( $post_candidates, $query, self::POST_TOP_N );
+            $ranked      = SFAF_Chat_Core::rank_records( $post_candidates, $query, self::POST_TOP_N + self::POST_TITLES_N );
+            $posts       = array_slice( $ranked, 0, self::POST_TOP_N );
+            $post_titles = array_slice( $ranked, self::POST_TOP_N );
         }
 
         // Tier 3: live events from the calendar on this site, matched to the question.
         // A failure here costs the events, never the answer.
         $events      = array();
+        $candidates  = array();
         $calendar    = null;
         $events_note = '';
         if ( self::EVENTS_ENABLED ) {
             try {
                 $live = SFAF_Chat_Events::for_question( $question, $user_turns );
             } catch ( Throwable $e ) {
-                $live = array( 'events' => array(), 'calendar' => null, 'note' => '' );
+                $live = array( 'events' => array(), 'candidates' => array(), 'calendar' => null, 'note' => '' );
             }
             $events      = array_values( array_filter( $live['events'], $in_scope_source ) );
+            $candidates  = array_values( array_filter( (array) ( $live['candidates'] ?? array() ), $in_scope_source ) );
             $calendar    = ( is_array( $live['calendar'] ) && $in_scope_source( $live['calendar'] ) ) ? $live['calendar'] : null;
             $events_note = SFAF_Chat_Core::no_em_dash( (string) $live['note'] );
         }
 
         // Every record the model can see, and therefore the ONLY ids it can link to.
         $record_map = array();
-        foreach ( array_merge( $core, $related, $posts, $events, null === $calendar ? array() : array( $calendar ) ) as $r ) {
+        foreach ( array_merge( $core, $related, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ) ) as $r ) {
             $record_map[ $r['id'] ] = $r;
         }
 
@@ -425,11 +434,11 @@ class SFAF_Chat_Endpoint {
             return array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), $out );
         };
 
-        // A post goes to the model as a short excerpt with its summary, never in full.
-        $for_post = function ( array $r ) {
-            $words = preg_split( '/\s+/u', (string) ( $r['text'] ?? '' ), -1, PREG_SPLIT_NO_EMPTY );
-            $text  = implode( ' ', array_slice( $words, 0, self::MAX_POST_WORDS_SENT ) )
-                . ( count( $words ) > self::MAX_POST_WORDS_SENT ? ' …' : '' );
+        // A post goes to the model as its summary and a short excerpt, never in full.
+        // The excerpt is the stretch of the post most about the question.
+        $query_terms = SFAF_Chat_Core::query_terms( $query );
+        $for_post    = function ( array $r ) use ( $query_terms ) {
+            $text = SFAF_Chat_Core::best_passage( (string) ( $r['text'] ?? '' ), $query_terms, self::MAX_POST_WORDS_SENT );
             return array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), array(
                 'id'      => $r['id'],
                 'title'   => (string) ( $r['title'] ?? '' ),
@@ -460,10 +469,23 @@ class SFAF_Chat_Endpoint {
 
         if ( array() !== $posts ) {
             $system_instruction .= "\n\n## BLOG POSTS (lower priority, pointer only)\n"
-                . "SFAF blog posts that matched the question. They are NOT official or current fact, and "
-                . "older ones may be out of date. Use one only when the sections above do not cover the "
-                . "question, and then point to it rather than recite it. Only an excerpt is shown.\n"
+                . "SFAF blog posts that matched the question, best match first. They are NOT official or "
+                . "current fact, and older ones may be out of date. Use one only when the sections above do "
+                . "not cover the question, and then point to it rather than recite it. Each shows a summary "
+                . "and the excerpt most related to the question, not the whole post.\n"
                 . json_encode( array_map( $for_post, $posts ), $enc );
+
+            if ( array() !== $post_titles ) {
+                $system_instruction .= "\nMore posts that matched, titles only. Same rules; link one by id if "
+                    . "its title is clearly what the visitor asked about.\n"
+                    . json_encode( array_map( function ( array $r ) {
+                        return array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), array(
+                            'id'    => $r['id'],
+                            'title' => (string) ( $r['title'] ?? '' ),
+                            'type'  => 'post',
+                        ) );
+                    }, $post_titles ), $enc );
+            }
         }
 
         $calendar_hint = null === $calendar ? 'point to the events page'
@@ -479,6 +501,18 @@ class SFAF_Chat_Endpoint {
                 . "If none of these is clearly what the visitor asked about, do not offer one as if it were; "
                 . "{$calendar_hint} instead. When you mention one event, link it by its id.\n"
                 . json_encode( array_map( $for_model, $events ), $enc );
+        }
+
+        if ( array() !== $candidates ) {
+            $system_instruction .= "\n\n## OTHER UPCOMING EVENTS (not matched, judge for yourself)\n"
+                . "The visitor asked about events on a subject, and no event's words matched it. These are "
+                . "the next upcoming events, already filtered server-side like UPCOMING EVENTS, one per "
+                . "series, with their calendar labels. Offer one ONLY if its title or labels clearly show it "
+                . "is what the visitor asked about, and describe it by what the calendar says (for example "
+                . "\"from Programa Latino\"). Never say an event is in a particular language, or for a "
+                . "particular group, unless its title or labels say so. If none clearly fits, say you don't "
+                . "see one and {$calendar_hint}. Never compare or work out dates.\n"
+                . json_encode( array_map( $for_model, $candidates ), $enc );
         }
 
         if ( null !== $calendar ) {
