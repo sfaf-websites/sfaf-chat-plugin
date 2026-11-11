@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.7.0
+Stable tag: 1.8.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -33,9 +33,14 @@ use the Check for updates link in the plugin's row.
 
 == Changelog ==
 
+= 1.8.0 =
+* The assistant now speaks as SFAF, in the first person: "our PrEP & PEP page explains...",
+  "we offer", "nuestra página", instead of "SFAF's page" or "according to SFAF". It still
+  says which page information comes from, and blog posts keep their own label.
+
 = 1.7.0 =
 * General health questions are answered when SFAF's own pages cover them, by relaying what
-  the page says and linking it ("SFAF's PrEP & PEP page says..."). They are no longer
+  the page says and linking it. They are no longer
   declined as personal advice just for being about health or sex.
 * Questions about a person's own situation (their exposure, symptoms, results, whether they
   should take something) are still declined warmly and sent to the clinic.
