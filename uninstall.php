@@ -25,6 +25,7 @@ foreach ( array(
     'sfaf_chat_models',
     'sfaf_chat_index_state',
     'sfaf_chat_alerts',
+    'sfaf_chat_extra_urls',
     'sfaf_chat_installed_version',
 ) as $sfaf_chat_option ) {
     delete_option( $sfaf_chat_option );

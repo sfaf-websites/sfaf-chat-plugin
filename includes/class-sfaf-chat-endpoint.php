@@ -52,6 +52,14 @@ class SFAF_Chat_Endpoint {
      * should point to a post, not recite it. A post can be old, and on health
      * topics old can mean wrong. See also POST_DECLINE_FLAGS.
      */
+    /*
+     * OTHER SITES (tweaker.org, Cycle to Zero): pages from sites other than SFAF's
+     * own (sfaf.org and its subdomains), ranked apart from RELATED PAGES so they never
+     * crowd out an SFAF page, and named by site so the model attributes them instead
+     * of blending them into SFAF's voice. See SFAF_Chat_Indexer::is_own().
+     */
+    const OTHER_TOP_N         = 4;
+
     const POST_TOP_N          = 3;
     const POST_TITLES_N       = 7;
     const MAX_POST_WORDS_SENT = 120;
@@ -349,17 +357,25 @@ class SFAF_Chat_Endpoint {
         // Tier 2: indexed pages, pre-filtered by keyword overlap with the question.
         // Blog posts (type "post") are ranked separately, as a lower tier: see POST_TOP_N.
         $related     = array();
+        $other_pages = array();
         $posts       = array();
         $post_titles = array();
         $query       = array();
         $index       = SFAF_Chat_Core::read_json( SFAF_Chat_Core::index_path() );
         $index_pages = array();
         if ( isset( $index['records'] ) && is_array( $index['records'] ) ) {
-            $candidates      = array();
-            $post_candidates = array();
+            $candidates       = array();
+            $post_candidates  = array();
+            $other_candidates = array();
             foreach ( $index['records'] as $r ) {
                 if ( ! is_array( $r ) || ! isset( $r['id'], $r['url'] ) || ! $in_scope_source( $r )
                     || isset( $core_urls[ $url_key( $r['url'] ) ] ) ) {
+                    continue;
+                }
+                if ( ! SFAF_Chat_Indexer::is_own( $r['source'] ?? '' ) ) {
+                    if ( 'post' !== ( $r['type'] ?? 'page' ) ) {
+                        $other_candidates[] = $r;
+                    }
                     continue;
                 }
                 if ( 'post' !== ( $r['type'] ?? 'page' ) ) {
@@ -384,7 +400,8 @@ class SFAF_Chat_Endpoint {
                 $query[ $tok ] = 1.0;
             }
 
-            $related = SFAF_Chat_Core::rank_records( $candidates, $query, self::PREFILTER_TOP_N );
+            $related     = SFAF_Chat_Core::rank_records( $candidates, $query, self::PREFILTER_TOP_N );
+            $other_pages = SFAF_Chat_Core::rank_records( $other_candidates, $query, self::OTHER_TOP_N );
             $ranked      = SFAF_Chat_Core::rank_records( $post_candidates, $query, self::POST_TOP_N + self::POST_TITLES_N );
             $posts       = array_slice( $ranked, 0, self::POST_TOP_N );
             $post_titles = array_slice( $ranked, self::POST_TOP_N );
@@ -416,7 +433,7 @@ class SFAF_Chat_Endpoint {
 
         // Every record the model can see, and therefore the ONLY ids it can link to.
         $record_map = array();
-        foreach ( array_merge( $core, $related, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ), null === $program ? array() : array( $program ) ) as $r ) {
+        foreach ( array_merge( $core, $related, $other_pages, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ), null === $program ? array() : array( $program ) ) as $r ) {
             $record_map[ $r['id'] ] = $r;
         }
 
@@ -502,6 +519,17 @@ class SFAF_Chat_Endpoint {
                         ) );
                     }, $post_titles ), $enc );
             }
+        }
+
+        if ( array() !== $other_pages ) {
+            $system_instruction .= "\n\n## OTHER SITES (not our main site, lower priority)\n"
+                . "Pages from other sites, each named in \"site\". Use one only when the question is about "
+                . "that site's subject, or our own pages don't cover it. Say whose site it is and link it, for "
+                . "example \"Cycle to Zero's site has registration details.\" Don't speak as that site or call "
+                . "its content ours, and don't take on its voice; describe what its page says plainly.\n"
+                . json_encode( array_map( function ( array $r ) use ( $for_model ) {
+                    return $for_model( $r ) + array( 'site' => SFAF_Chat_Indexer::site_name( (string) ( $r['source'] ?? '' ) ) );
+                }, $other_pages ), $enc );
         }
 
         $calendar_hint = null === $calendar ? 'point to the events page'
@@ -861,6 +889,13 @@ class SFAF_Chat_Endpoint {
         $label = SFAF_Chat_Core::no_em_dash( $r['title'] ?? $r['id'] );
         if ( 'post' === ( $r['type'] ?? '' ) ) {
             $label = self::POST_KIND . ': ' . $label;
+        } elseif ( isset( $r['source'] ) && 'event' !== ( $r['type'] ?? '' ) && ! SFAF_Chat_Indexer::is_own( $r['source'] ) ) {
+            // Another site says so on the button: "Cycle to Zero: Registration", unless
+            // the title already starts with the site's name.
+            $site = SFAF_Chat_Indexer::site_name( (string) $r['source'] );
+            if ( 0 !== stripos( $label, $site ) ) {
+                $label = $site . ': ' . $label;
+            }
         }
         return array(
             'label' => $label,

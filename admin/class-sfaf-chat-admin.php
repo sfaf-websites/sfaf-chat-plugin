@@ -30,11 +30,14 @@ class SFAF_Chat_Admin {
     private $appearance;
     private $questions;
     private $messages;
+    private $indexing;
 
     public function register() {
         $this->appearance = new SFAF_Chat_Admin_Appearance( $this );
         $this->questions  = new SFAF_Chat_Admin_Questions( $this );
         $this->messages   = new SFAF_Chat_Admin_Messages( $this );
+        $this->indexing   = new SFAF_Chat_Admin_Index( $this );
+        $this->indexing->register();
         $this->appearance->register();
         $this->questions->register();
         $this->messages->register();
@@ -55,6 +58,7 @@ class SFAF_Chat_Admin {
         add_submenu_page( self::MENU, 'Appearance', 'Appearance', self::CAP, SFAF_Chat_Admin_Appearance::PAGE, array( $this->appearance, 'render' ) );
         add_submenu_page( self::MENU, 'Suggested Questions', 'Suggested Questions', self::CAP, SFAF_Chat_Admin_Questions::PAGE, array( $this->questions, 'render' ) );
         add_submenu_page( self::MENU, 'Welcome & Alerts', 'Welcome &amp; Alerts', self::CAP, SFAF_Chat_Admin_Messages::PAGE, array( $this->messages, 'render' ) );
+        add_submenu_page( self::MENU, 'Indexing', 'Indexing', self::CAP, SFAF_Chat_Admin_Index::PAGE, array( $this->indexing, 'render' ) );
         add_submenu_page( self::MENU, 'Special Instructions', 'Special Instructions', self::CAP, self::SPECIAL_PAGE, array( $this, 'render_special' ) );
         add_submenu_page( self::MENU, 'Pinned Answers', 'Pinned Answers', self::CAP, self::PINS_PAGE, array( $this, 'render_pins' ) );
         add_submenu_page( self::MENU, 'SFAF Chat Dashboard', 'Dashboard', self::CAP, self::DASH_PAGE, array( 'SFAF_Chat_Dashboard', 'render' ) );
@@ -80,6 +84,7 @@ class SFAF_Chat_Admin {
             SFAF_Chat_Admin_Appearance::PAGE => 'Appearance',
             SFAF_Chat_Admin_Questions::PAGE  => 'Suggested Questions',
             SFAF_Chat_Admin_Messages::PAGE   => 'Welcome & Alerts',
+            SFAF_Chat_Admin_Index::PAGE      => 'Indexing',
             self::SPECIAL_PAGE               => 'Special Instructions',
             self::PINS_PAGE                  => 'Pinned Answers',
             self::DASH_PAGE                  => 'Dashboard',

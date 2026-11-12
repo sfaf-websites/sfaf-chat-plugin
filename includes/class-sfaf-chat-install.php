@@ -27,6 +27,7 @@ class SFAF_Chat_Install {
     private static function run() {
         SFAF_Chat_Log::create_table();
         SFAF_Chat_Settings::seed();
+        SFAF_Chat_Extra_Urls::seed();
         SFAF_Chat_Core::data_dir();
 
         if ( ! wp_next_scheduled( SFAF_Chat_Log::CRON_HOOK ) ) {

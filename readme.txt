@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.10.0
+Stable tag: 1.11.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,16 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.11.0 =
+* Indexing screen. Staff can add pages no sitemap lists, such as campaign and event pages
+  on donate.sfaf.org. Each is fetched daily and tagged with its site; one that stops
+  working is dropped from the index and flagged, with a Re-check button. The Santa
+  Skivvies page is added to start.
+* Pages built in the browser (donate.sfaf.org) are read from their structured data: event
+  date and place, registration, and FAQs.
+* tweaker.org and Cycle to Zero are crawled too. The assistant names those sites and links
+  them, instead of speaking for them as SFAF.
 
 = 1.10.0 =
 * Answers state the fact and link the page, without an "Our ... page explains that"
