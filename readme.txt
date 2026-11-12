@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.9.0
+Stable tag: 1.10.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,14 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.10.0 =
+* Answers state the fact and link the page, without an "Our ... page explains that"
+  opening. General answers offer resources plainly ("Our Strut clinic can help") instead
+  of "if you need...". The same in Spanish.
+* Answers made of several items (closures, hours by location, events, options) are a short
+  bulleted list; single answers stay as a sentence or two. The chat shows lists as lists,
+  never as raw asterisks or dashes, and Read aloud skips the markers.
 
 = 1.9.0 =
 * Welcome & Alerts screen. The chat's welcome message is editable, and the default is now

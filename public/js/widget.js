@@ -185,6 +185,12 @@
     '  border-radius:var(--sfaf-radius);',
     '  animation:sfaf-rise .34s var(--sfaf-ease) both;}',
     '@keyframes sfaf-rise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}',
+    '#sfaf-chat .sfaf-msg .sfaf-p{margin:0;}',
+    '#sfaf-chat .sfaf-msg .sfaf-p+.sfaf-p,#sfaf-chat .sfaf-msg .sfaf-list+.sfaf-p{margin-top:8px;}',
+    '#sfaf-chat .sfaf-msg .sfaf-list{margin:6px 0 0;padding-left:20px;white-space:normal;}',
+    '#sfaf-chat .sfaf-msg .sfaf-list li{margin:0;}',
+    '#sfaf-chat .sfaf-msg .sfaf-list li+li{margin-top:3px;}',
+    '#sfaf-chat .sfaf-msg strong{font-weight:600;}',
     '#sfaf-chat .sfaf-bot{align-self:flex-start;background:var(--sfaf-bot-bg);color:var(--sfaf-bot-text);',
     '  border:1px solid var(--sfaf-border);}',
     '#sfaf-chat .sfaf-user{align-self:flex-end;background:var(--sfaf-user-bg);color:var(--sfaf-user-text);}',
@@ -527,13 +533,60 @@
 
   // Plain text, with US phone numbers turned into tap-to-call links.
   var PHONE_RE = /(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})/g;
-  function fillText(node, text) {
-    var parts = String(text).split(PHONE_RE);
-    for (var i = 0; i < parts.length; i++) {
-      if (!parts[i]) continue;
-      if (i % 2 === 1) node.appendChild(telLink(parts[i]));
-      else node.appendChild(document.createTextNode(parts[i]));
+  // Text with phone numbers as tap-to-call links, and **bold** as <strong>. Built from
+  // text nodes only: nothing in a reply is ever parsed as HTML.
+  function inline(node, text) {
+    var bold = String(text).split(/\*\*([^*\n]+)\*\*/);
+    for (var b = 0; b < bold.length; b++) {
+      var target = node;
+      if (b % 2 === 1) { target = el('strong'); node.appendChild(target); }
+      var parts = bold[b].split(PHONE_RE);
+      for (var i = 0; i < parts.length; i++) {
+        if (!parts[i]) continue;
+        if (i % 2 === 1) target.appendChild(telLink(parts[i]));
+        else target.appendChild(document.createTextNode(parts[i]));
+      }
     }
+  }
+
+  // A reply's lines: runs starting "- ", "* " or a bullet character become a bulleted
+  // list, "1. " a numbered one; other lines stay text, a blank line between paragraphs.
+  // So a list the model writes reads as a list, never as raw asterisks.
+  var LIST_RE = /^\s*(?:([-*•])|(\d{1,2})[.)])\s+(.*)$/;
+  function fillText(node, text) {
+    var lines = String(text).replace(/\r\n?/g, '\n').split('\n');
+    var para = [];
+    var list = null;
+    var listTag = '';
+    function flush() {
+      if (!para.length) return;
+      var p = el('p', 'sfaf-p');
+      inline(p, para.join('\n'));
+      node.appendChild(p);
+      para = [];
+    }
+    lines.forEach(function (line) {
+      var m = LIST_RE.exec(line);
+      if (m) {
+        flush();
+        var tag = m[2] ? 'ol' : 'ul';
+        if (!list || listTag !== tag) {
+          list = el(tag, 'sfaf-list');
+          listTag = tag;
+          node.appendChild(list);
+        }
+        var li = el('li');
+        inline(li, m[3]);
+        list.appendChild(li);
+      } else if (!line.trim()) {
+        flush();
+        list = null;
+      } else {
+        list = null;
+        para.push(line);
+      }
+    });
+    flush();
   }
 
   function scrollDown() {
@@ -896,6 +949,8 @@
   function speakable(text) {
     return String(text)
       .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')                 // [label](url) keeps the label
+      .replace(/^\s*(?:[-*•]|\d{1,2}[.)])\s+/gm, '')    // list markers are not read out
+      .replace(/([^.!?:;\s])[ \t]*\n/g, '$1.\n')                // a line ends in a pause
       .replace(/\b(?:https?:\/\/|www\.)[^\s)]+/gi, 'the link') // a bare address is never spelled out
       .replace(/\(?(\d{3})\)?[\s.-](\d{3})[\s.-](\d{4})/g, function (m, a, b, c) {
         return [a, b, c].map(function (g) { return g.split('').join(' '); }).join(', ');

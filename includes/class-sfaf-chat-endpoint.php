@@ -529,8 +529,8 @@ class SFAF_Chat_Endpoint {
                 . "or which is next: the list is already in order, and \"date\" is exactly as the calendar "
                 . "gives it. {$events_note}\n"
                 . "If none of these is clearly what the visitor asked about, do not offer one as if it were; "
-                . "{$calendar_hint} instead. When several are listed, list them all, one short line each "
-                . "(title and date), in the order given, and {$list_link}. When only one is listed, link "
+                . "{$calendar_hint} instead. When several are listed, list them all as a bulleted list, one "
+                . "line each (title and date), in the order given, and {$list_link}. When only one is listed, link "
                 . "it by its id" . ( null !== $program ? ', or the program page' : '' ) . ".\n"
                 . json_encode( array_map( $for_model, $events ), $enc );
         }
