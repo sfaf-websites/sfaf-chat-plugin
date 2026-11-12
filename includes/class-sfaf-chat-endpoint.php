@@ -60,6 +60,15 @@ class SFAF_Chat_Endpoint {
      */
     const OTHER_TOP_N         = 4;
 
+    /*
+     * DONATE BUTTON. Only on a donation question that was answered (topic "donate",
+     * in scope, no flag), never on a refusal or a crisis. It links to the donate page
+     * with the chat's UTM tags; the chat never touches payment. The page is the
+     * curated "donate" record's address, so it changes with the knowledge base.
+     */
+    const DONATE_FALLBACK = 'https://donate.sfaf.org/campaign/773029/donate';
+    const DONATE_UTM      = array( 'utm_source' => 'chat', 'utm_medium' => 'assistant', 'utm_campaign' => 'sfaf_chat' );
+
     const POST_TOP_N          = 3;
     const POST_TITLES_N       = 7;
     const MAX_POST_WORDS_SENT = 120;
@@ -661,6 +670,7 @@ class SFAF_Chat_Endpoint {
             // (which can echo request details back).
             SFAF_Chat_Log::write( array(
                 'question' => $question,
+                'page'     => $page,
                 'topic'    => null,
                 'in_scope' => null,
                 'flag'     => 'api_error',
@@ -685,6 +695,7 @@ class SFAF_Chat_Endpoint {
             SFAF_Chat_Log::write( array(
                 'question' => $question,
                 'answer'   => $fallback,
+                'page'     => $page,
                 'topic'    => 'other',
                 'in_scope' => null,
                 'flag'     => 'parse_error',
@@ -772,9 +783,24 @@ class SFAF_Chat_Endpoint {
             }
         }
 
+        // Donate button: a donation question, answered. It replaces a plain link to
+        // the same page, so the visitor sees one way to give, not two.
+        $donate = null;
+        if ( 'donate' === $topic && $answered_in_scope && null === $flag ) {
+            $donate_url = (string) ( $record_map['donate']['url'] ?? self::DONATE_FALLBACK );
+            if ( ! preg_match( '#^https://#i', $donate_url ) ) {
+                $donate_url = self::DONATE_FALLBACK;
+            }
+            $donate = array( 'label' => 'Donate', 'url' => add_query_arg( self::DONATE_UTM, $donate_url ) );
+            if ( null !== $link && strtok( (string) $link['url'], '?' ) === strtok( $donate_url, '?' ) ) {
+                $link = null;
+            }
+        }
+
         SFAF_Chat_Log::write( array(
             'question' => $question,
             'answer'   => $answer,
+            'page'     => $page,
             'topic'    => $topic,
             'in_scope' => $answered_in_scope,
             'flag'     => $flag,
@@ -792,6 +818,7 @@ class SFAF_Chat_Endpoint {
             'in_scope' => $answered_in_scope,
             // "Contact our team", when the subject is a service and the form is set up.
             'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page ),
+            'donate'   => $donate,
         ), 200 );
     }
 

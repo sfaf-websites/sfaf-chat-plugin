@@ -252,6 +252,15 @@
     '#sfaf-chat .sfaf-contact-status{margin:0;font-size:13.5px;}',
     '#sfaf-chat .sfaf-contact-status:empty{display:none;}',
 
+    // Donate: a full-width accent button, only on a donation answer. A link, never a payment.
+    '#sfaf-chat .sfaf-donatebtn{align-self:stretch;display:flex;align-items:center;justify-content:center;gap:8px;',
+    '  background:var(--sfaf-accent);color:var(--sfaf-on-accent);border-radius:var(--sfaf-radius);',
+    '  padding:12px 16px;font-weight:700;font-size:16px;line-height:1.2;text-decoration:none;',
+    '  animation:sfaf-rise .34s var(--sfaf-ease) .06s both;transition:background .16s ease;}',
+    '#sfaf-chat .sfaf-donatebtn:hover{background:var(--sfaf-accent-hover);}',
+    '#sfaf-chat .sfaf-donatebtn:focus-visible{outline:2px solid var(--sfaf-focus);outline-offset:2px;}',
+    '#sfaf-chat .sfaf-donatebtn svg{width:16px;height:16px;flex:none;}',
+
     // Link button: the one yellow element in the conversation.
     '#sfaf-chat .sfaf-linkbtn{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;',
     '  max-width:84%;background:var(--sfaf-accent);color:var(--sfaf-on-accent);border:0;border-radius:var(--sfaf-radius);',
@@ -641,6 +650,18 @@
     scrollDown();
   }
 
+  function addDonate(d) {
+    if (!d || !isHttps(d.url)) return;
+    var a = el('a', 'sfaf-donatebtn');
+    a.href = d.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.appendChild(el('span', null, d.label || 'Donate'));
+    a.appendChild(svg(ICON_ARROW));
+    messages.appendChild(a);
+    scrollDown();
+  }
+
   function addCard(card) {
     if (!card || !isHttps(card.url)) return;
     var c = el('div', 'sfaf-card');
@@ -855,6 +876,7 @@
         addBubble('bot', data.answer);
         if (data.card) addCard(data.card);
         else if (data.link) addLink(data.link);
+        if (data.donate) addDonate(data.donate);
         if (data.contact && typeof data.contact.label === 'string') addContact(data.contact.label);
 
         // Only completed exchanges enter the thread.

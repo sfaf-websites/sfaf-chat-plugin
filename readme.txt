@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.12.0
+Stable tag: 1.13.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,14 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.13.0 =
+* A Donate button on donation questions, linking to our donation page with the chat's
+  tracking tags (utm_source=chat, utm_medium=assistant, utm_campaign=sfaf_chat). The chat
+  never handles payment.
+* The Dashboard shows the page each question was asked on, in Recent exchanges and in a
+  new Questions by page list. Only the page address is kept, never its query string, and
+  still no IP address, user or session.
 
 = 1.12.0 =
 * "Contact our team". When a question is about a service, a program or getting help, the

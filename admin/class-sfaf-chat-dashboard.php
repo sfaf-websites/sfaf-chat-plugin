@@ -20,6 +20,11 @@ class SFAF_Chat_Dashboard {
         return ( 0 === $h % 12 ? 12 : $h % 12 ) . ( $h < 12 ? ' am' : ' pm' );
     }
 
+    /** "www.sfaf.org/strut/": the host and path, without the scheme. */
+    private static function page_label( $url ) {
+        return (string) preg_replace( '#^https?://#i', '', $url );
+    }
+
     public static function render() {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_die( 'You do not have permission to view this page.', 403 );
@@ -44,6 +49,7 @@ class SFAF_Chat_Dashboard {
         $flags    = array( 'personal_advice' => 0, 'out_of_scope' => 0, 'crisis' => 0 );
         $queue     = array();
         $exchanges = array();   // rows with question text: raw logging was on
+        $pages     = array();   // page => questions asked there
         $raw_seen  = false;
 
         foreach ( $rows as $r ) {
@@ -60,6 +66,9 @@ class SFAF_Chat_Dashboard {
                 continue;
             }
             $total++;
+            if ( ! empty( $r['page'] ) ) {
+                $pages[ (string) $r['page'] ] = ( $pages[ (string) $r['page'] ] ?? 0 ) + 1;
+            }
 
             $topic = is_string( $r['topic'] ?? null ) && '' !== $r['topic'] ? $r['topic'] : 'other';
             $topics[ $topic ] = ( $topics[ $topic ] ?? 0 ) + 1;
@@ -81,6 +90,8 @@ class SFAF_Chat_Dashboard {
         }
 
         arsort( $topics );
+        arsort( $pages );
+        $pages = array_slice( $pages, 0, 15, true );
         $queue     = array_slice( array_reverse( $queue ), 0, 200 );
         $exchanges = array_slice( array_reverse( $exchanges ), 0, 200 );
 
@@ -197,6 +208,23 @@ class SFAF_Chat_Dashboard {
             <?php endif; ?>
         </section>
 
+        <section class="card" aria-labelledby="t-pages">
+            <h2 id="t-pages">Questions by page</h2>
+            <p class="sub">Where people asked, from the address of the page the chat was open on (no query strings). Top 15.</p>
+            <?php if ( ! $pages ) : ?>
+                <p class="empty">No page recorded in this range yet. Pages are recorded from version 1.13.0.</p>
+            <?php else : ?>
+                <table class="pages">
+                    <thead><tr><th>Page</th><th>Questions</th></tr></thead>
+                    <tbody>
+                        <?php foreach ( $pages as $url => $n ) : ?>
+                            <tr><td><?php echo esc_html( self::page_label( (string) $url ) ); ?></td><td><?php echo (int) $n; ?></td></tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endif; ?>
+        </section>
+
         <section class="card" aria-labelledby="t-exchanges">
             <h2 id="t-exchanges">Recent exchanges</h2>
             <p class="sub">Each question with the answer the visitor was shown, newest first<?php echo 200 === count( $exchanges ) ? ' (latest 200)' : ''; ?>. Only recorded while raw logging is on in Settings. Each row stands alone: rows are never linked into conversations.</p>
@@ -204,7 +232,7 @@ class SFAF_Chat_Dashboard {
                 <p class="empty">No exchanges recorded in this range. Turn on raw logging in Settings to review them.</p>
             <?php else : ?>
                 <table class="exchanges">
-                    <thead><tr><th>When (Pacific)</th><th>Question</th><th>Answer</th><th>Details</th></tr></thead>
+                    <thead><tr><th>When (Pacific)</th><th>Question</th><th>Answer</th><th>Page</th><th>Details</th></tr></thead>
                     <tbody>
                         <?php foreach ( $exchanges as $r ) : ?>
                             <tr>
@@ -219,6 +247,7 @@ class SFAF_Chat_Dashboard {
                                         echo '<span class="nq">not recorded</span>';
                                     }
                                 ?></td>
+                                <td class="page"><?php echo ! empty( $r['page'] ) ? esc_html( self::page_label( (string) $r['page'] ) ) : '<span class="nq">not recorded</span>'; ?></td>
                                 <td class="meta"><?php
                                     $bits = array( (string) ( $r['topic'] ?? 'other' ) );
                                     if ( ! empty( $r['flag'] ) ) {

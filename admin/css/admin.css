@@ -144,6 +144,7 @@
 .sfaf-chat-dash .a { color: var(--text-2); white-space: pre-wrap; }
 .sfaf-chat-dash .exchanges td { overflow-wrap: anywhere; }
 .sfaf-chat-dash .exchanges td.meta { color: var(--muted); font-size: 12px; min-width: 120px; }
+.sfaf-chat-dash .exchanges td.page, .sfaf-chat-dash .pages td:first-child { font-size: 12px; overflow-wrap: anywhere; min-width: 140px; }
 
 @media (max-width: 560px) {
   .sfaf-chat-dash .xaxis span:nth-child(odd) { visibility: hidden; }
