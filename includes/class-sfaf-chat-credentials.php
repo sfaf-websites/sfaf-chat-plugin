@@ -46,6 +46,8 @@ class SFAF_Chat_Credentials {
             'api_key'     => 'secret',
             'index_token' => 'secret',
             'model'       => 'text',
+            // The contact form's own Postmark server token. Not the calendar's.
+            'postmark_token' => 'secret',
         );
     }
 

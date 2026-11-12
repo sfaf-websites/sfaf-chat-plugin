@@ -188,6 +188,15 @@ class SFAF_Chat_Starters {
         return array( 'set' => 'default', 'label' => 'Default', 'questions' => self::clean( $config['default'] ?? array() ) );
     }
 
+    /**
+     * Does this page address match this pattern? The same rules as the question
+     * sets (a path, /x/* or a full URL; /es/ ignored), for contact routing too.
+     */
+    public static function page_matches( $pattern, $url ) {
+        $page = self::page( $url );
+        return null !== $page && self::matches( (string) $pattern, $page['host'], $page['path'] );
+    }
+
     /** Host and normalized path of a page address, or null if it isn't one. */
     private static function page( $url ) {
         if ( ! is_string( $url ) || '' === $url || strlen( $url ) > self::MAX_URL_LEN ) {

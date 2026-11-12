@@ -160,6 +160,29 @@ class SFAF_Chat_Core {
         return $out;
     }
 
+    /**
+     * The page a question was asked on, as the widget reports it: http(s), no query
+     * or fragment (where personal details could ride), 255 characters at most. ''
+     * when it isn't a page address. Never trusted for anything but routing a
+     * contact request and the Dashboard.
+     */
+    public static function clean_page_url( $url ) {
+        $url = trim( (string) $url );
+        if ( '' === $url || strlen( $url ) > 1000 || ! preg_match( '#^https?://#i', $url ) ) {
+            return '';
+        }
+        $url   = (string) preg_replace( '/[?#].*$/s', '', $url );
+        $parts = wp_parse_url( $url );
+        if ( ! is_array( $parts ) || empty( $parts['host'] ) || isset( $parts['user'] ) || isset( $parts['pass'] )
+            || ! preg_match( '/^[a-z0-9.-]+$/i', $parts['host'] ) ) {
+            return '';
+        }
+        $clean = strtolower( $parts['scheme'] ) . '://' . strtolower( $parts['host'] )
+            . ( isset( $parts['port'] ) ? ':' . (int) $parts['port'] : '' )
+            . (string) ( $parts['path'] ?? '/' );
+        return mb_substr( $clean, 0, 255 );
+    }
+
     /* ===================== MATCHING: STEMS AND SYNONYMS ==================== */
 
     /*

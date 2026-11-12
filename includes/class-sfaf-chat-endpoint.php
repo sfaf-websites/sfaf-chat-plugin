@@ -120,6 +120,11 @@ class SFAF_Chat_Endpoint {
             'callback'            => array( $this, 'starters' ),
             'permission_callback' => '__return_true',
         ) );
+        register_rest_route( self::REST_NAMESPACE, '/contact', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'contact' ),
+            'permission_callback' => '__return_true',
+        ) );
         register_rest_route( self::REST_NAMESPACE, '/widget\.js', array(
             'methods'             => 'GET',
             'callback'            => array( $this, 'widget_placeholder' ),
@@ -182,8 +187,8 @@ class SFAF_Chat_Endpoint {
         header( 'X-LiteSpeed-Cache-Control: no-cache' );
         do_action( 'litespeed_control_set_nocache', 'sfaf-chat' );
 
-        // The two routes the widget calls from another site. Both get the CORS rules.
-        $is_called = in_array( $route, array( '/' . self::REST_NAMESPACE . '/ask', '/' . self::REST_NAMESPACE . '/starters' ), true );
+        // The routes the widget calls from another site. All get the CORS rules.
+        $is_called = in_array( $route, array( '/' . self::REST_NAMESPACE . '/ask', '/' . self::REST_NAMESPACE . '/starters', '/' . self::REST_NAMESPACE . '/contact' ), true );
         $is_widget = '/' . self::REST_NAMESPACE . '/widget.js' === $route;
 
         if ( $is_called ) {
@@ -244,6 +249,26 @@ class SFAF_Chat_Endpoint {
         return new WP_REST_Response( array( 'ok' => true, 'questions' => $set['questions'], 'alerts' => $alerts ), 200 );
     }
 
+    /* ================================ CONTACT ============================= */
+
+    /**
+     * "Contact our team": the same switch and origin rules as ask. Sends one email
+     * through Postmark and keeps nothing. See SFAF_Chat_Contact.
+     */
+    public function contact( WP_REST_Request $request ) {
+        if ( ! SFAF_Chat_Settings::is_on() ) {
+            return $this->fail( 'The assistant is not available.', 403 );
+        }
+        if ( ! self::origin_allowed( get_http_origin() ) ) {
+            return $this->fail( 'Forbidden', 403 );
+        }
+        $body   = json_decode( (string) $request->get_body(), true );
+        $result = SFAF_Chat_Contact::submit( is_array( $body ) ? $body : array() );
+        $status = (int) $result['status'];
+        unset( $result['status'] );
+        return new WP_REST_Response( $result, $status );
+    }
+
     /* ================================== ASK =============================== */
 
     /** An error in the shape the widget already understands. */
@@ -283,6 +308,10 @@ class SFAF_Chat_Endpoint {
 
         // Optional scope; unknown values fall back to "all".
         $scope = is_array( $body ) && is_string( $body['scope'] ?? null ) ? strtolower( trim( $body['scope'] ) ) : 'all';
+
+        // The page this was asked on, as the widget reports it, cleaned. For routing a
+        // contact request and for the Dashboard; never sent to the model.
+        $page = SFAF_Chat_Core::clean_page_url( is_array( $body ) ? ( $body['page'] ?? '' ) : '' );
         if ( ! array_key_exists( $scope, self::SCOPES ) ) {
             $scope = 'all';
         }
@@ -761,6 +790,8 @@ class SFAF_Chat_Endpoint {
             'link'     => $link,
             'card'     => $card,
             'in_scope' => $answered_in_scope,
+            // "Contact our team", when the subject is a service and the form is set up.
+            'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page ),
         ), 200 );
     }
 

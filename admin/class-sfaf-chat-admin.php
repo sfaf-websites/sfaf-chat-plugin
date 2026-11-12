@@ -31,6 +31,7 @@ class SFAF_Chat_Admin {
     private $questions;
     private $messages;
     private $indexing;
+    private $contact;
 
     public function register() {
         $this->appearance = new SFAF_Chat_Admin_Appearance( $this );
@@ -38,6 +39,8 @@ class SFAF_Chat_Admin {
         $this->messages   = new SFAF_Chat_Admin_Messages( $this );
         $this->indexing   = new SFAF_Chat_Admin_Index( $this );
         $this->indexing->register();
+        $this->contact    = new SFAF_Chat_Admin_Contact( $this );
+        $this->contact->register();
         $this->appearance->register();
         $this->questions->register();
         $this->messages->register();
@@ -59,6 +62,7 @@ class SFAF_Chat_Admin {
         add_submenu_page( self::MENU, 'Suggested Questions', 'Suggested Questions', self::CAP, SFAF_Chat_Admin_Questions::PAGE, array( $this->questions, 'render' ) );
         add_submenu_page( self::MENU, 'Welcome & Alerts', 'Welcome &amp; Alerts', self::CAP, SFAF_Chat_Admin_Messages::PAGE, array( $this->messages, 'render' ) );
         add_submenu_page( self::MENU, 'Indexing', 'Indexing', self::CAP, SFAF_Chat_Admin_Index::PAGE, array( $this->indexing, 'render' ) );
+        add_submenu_page( self::MENU, 'Contact', 'Contact', self::CAP, SFAF_Chat_Admin_Contact::PAGE, array( $this->contact, 'render' ) );
         add_submenu_page( self::MENU, 'Special Instructions', 'Special Instructions', self::CAP, self::SPECIAL_PAGE, array( $this, 'render_special' ) );
         add_submenu_page( self::MENU, 'Pinned Answers', 'Pinned Answers', self::CAP, self::PINS_PAGE, array( $this, 'render_pins' ) );
         add_submenu_page( self::MENU, 'SFAF Chat Dashboard', 'Dashboard', self::CAP, self::DASH_PAGE, array( 'SFAF_Chat_Dashboard', 'render' ) );
@@ -85,6 +89,7 @@ class SFAF_Chat_Admin {
             SFAF_Chat_Admin_Questions::PAGE  => 'Suggested Questions',
             SFAF_Chat_Admin_Messages::PAGE   => 'Welcome & Alerts',
             SFAF_Chat_Admin_Index::PAGE      => 'Indexing',
+            SFAF_Chat_Admin_Contact::PAGE    => 'Contact',
             self::SPECIAL_PAGE               => 'Special Instructions',
             self::PINS_PAGE                  => 'Pinned Answers',
             self::DASH_PAGE                  => 'Dashboard',

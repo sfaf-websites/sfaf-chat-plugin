@@ -66,6 +66,10 @@
 .sfaf-chat-errors li { margin: 0 0 4px; overflow-wrap: anywhere; }
 .sfaf-chat-extra td:first-child { overflow-wrap: anywhere; }
 
+/* Contact */
+.sfaf-chat-routes td { vertical-align: top; }
+.sfaf-chat-routes td:first-child { width: 22%; }
+
 /* Suggested questions */
 .sfaf-chat-set { background: #fff; border: 1px solid #c3c4c7; padding: 12px 16px; margin: 0 0 12px; max-width: 860px; }
 .sfaf-chat-set-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-end; justify-content: space-between; margin-bottom: 10px; }

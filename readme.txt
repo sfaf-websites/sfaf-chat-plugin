@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.11.0
+Stable tag: 1.12.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,16 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.12.0 =
+* "Contact our team". When a question is about a service, a program or getting help, the
+  chat offers a button. The visitor gives a name and an email, is told the chat transcript
+  will be attached and that someone will reach out within 1 to 2 business days, and the
+  request is emailed through Postmark to the team for the page they were on.
+* Contact screen: switch, Postmark server token, Reply-To, default recipients, and routes
+  by page (one or more recipients each), with a test email button.
+* Nothing about a request is stored on the site. Threats and abuse are refused gently and
+  not sent.
 
 = 1.11.0 =
 * Indexing screen. Staff can add pages no sitemap lists, such as campaign and event pages

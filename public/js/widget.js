@@ -33,6 +33,7 @@
   // Absolute: the widget runs on sfaf.org but the endpoint is on resources.sfaf.org.
   var PROXY_URL = CONFIG.proxy || 'https://resources.sfaf.org/wp-json/sfaf-chat/v1/ask';
   var STARTERS_URL = PROXY_URL.replace(/\/ask$/, '/starters');
+  var CONTACT_URL = PROXY_URL.replace(/\/ask$/, '/contact');
 
   // Prior messages sent with each question.
   // KEEP EQUAL TO MAX_HISTORY_TURNS IN includes/class-sfaf-chat-endpoint.php.
@@ -225,6 +226,31 @@
     '#sfaf-chat .sfaf-starter:nth-child(3){animation-delay:.1s;}',
     '#sfaf-chat .sfaf-starter:hover{background:var(--sfaf-surface);border-color:var(--sfaf-dark);}',
     '#sfaf-chat .sfaf-starter svg{width:15px;height:15px;flex:none;}',
+
+    // "Contact our team": an outline button, then a short form in the conversation.
+    '#sfaf-chat .sfaf-contactbtn{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;max-width:84%;',
+    '  background:transparent;color:var(--sfaf-text);border:1px solid var(--sfaf-dark);border-radius:var(--sfaf-radius);',
+    '  padding:8px 14px;font-weight:600;font-size:14px;line-height:1.35;cursor:pointer;',
+    '  animation:sfaf-rise .34s var(--sfaf-ease) .1s both;transition:background .16s ease;}',
+    '#sfaf-chat .sfaf-contactbtn:hover{background:var(--sfaf-surface);}',
+    '#sfaf-chat .sfaf-contact{align-self:stretch;display:flex;flex-direction:column;gap:10px;position:relative;',
+    '  background:var(--sfaf-surface);color:var(--sfaf-text);border:1px solid var(--sfaf-border);',
+    '  border-radius:var(--sfaf-radius);padding:12px 14px;font-size:14px;animation:sfaf-rise .34s var(--sfaf-ease) both;}',
+    '#sfaf-chat .sfaf-contact-title{font-weight:700;}',
+    '#sfaf-chat .sfaf-contact-note{margin:0;color:var(--sfaf-muted);font-size:13.5px;line-height:1.45;}',
+    '#sfaf-chat .sfaf-contact label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;}',
+    '#sfaf-chat .sfaf-contact input{font:inherit;font-weight:400;font-size:15px;color:var(--sfaf-text);background:var(--sfaf-surface);',
+    '  border:1px solid var(--sfaf-border);border-radius:var(--sfaf-radius);padding:8px 10px;width:100%;box-sizing:border-box;}',
+    '#sfaf-chat .sfaf-contact input:focus-visible{outline:2px solid var(--sfaf-focus);outline-offset:1px;}',
+    '#sfaf-chat .sfaf-contact-hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}',
+    '#sfaf-chat .sfaf-contact-actions{display:flex;gap:8px;flex-wrap:wrap;}',
+    '#sfaf-chat .sfaf-contact-send{background:var(--sfaf-dark);color:var(--sfaf-on-dark);border:0;border-radius:var(--sfaf-radius);',
+    '  padding:9px 16px;font-weight:600;font-size:14px;cursor:pointer;}',
+    '#sfaf-chat .sfaf-contact-send[disabled]{opacity:.6;cursor:default;}',
+    '#sfaf-chat .sfaf-contact-cancel{background:transparent;color:var(--sfaf-text);border:1px solid var(--sfaf-border);',
+    '  border-radius:var(--sfaf-radius);padding:9px 14px;font-size:14px;cursor:pointer;}',
+    '#sfaf-chat .sfaf-contact-status{margin:0;font-size:13.5px;}',
+    '#sfaf-chat .sfaf-contact-status:empty{display:none;}',
 
     // Link button: the one yellow element in the conversation.
     '#sfaf-chat .sfaf-linkbtn{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;',
@@ -815,7 +841,9 @@
     var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, REQUEST_TIMEOUT_MS);
 
     fetch(PROXY_URL, requestOptions(
-      { question: question, history: history, scope: SCOPE },
+      // The page goes along for routing "Contact our team" and for the Dashboard:
+      // origin and path only, never the query or fragment.
+      { question: question, history: history, scope: SCOPE, page: pageAddress() },
       ctrl ? ctrl.signal : undefined
     ))
       .then(function (res) { return res.json(); })
@@ -827,6 +855,7 @@
         addBubble('bot', data.answer);
         if (data.card) addCard(data.card);
         else if (data.link) addLink(data.link);
+        if (data.contact && typeof data.contact.label === 'string') addContact(data.contact.label);
 
         // Only completed exchanges enter the thread.
         thread.push({ role: 'user', text: question });
@@ -846,6 +875,123 @@
         setBusy(false);
         focusComposer();
       });
+  }
+
+  /* ============================ CONTACT FORM ============================== */
+  /*
+   * "Contact our team" opens a short form here in the conversation: a name and an
+   * email. The transcript the visitor can see goes with it. Nothing is kept in the
+   * browser beyond this panel, and closing the chat clears it like the rest.
+   */
+  var contactEl = null;
+  var contactSeq = 0;
+
+  function addContact(label) {
+    if (contactEl) { contactEl.remove(); contactEl = null; }
+    var b = el('button', 'sfaf-contactbtn', label);
+    b.type = 'button';
+    b.addEventListener('click', function () { showContactForm(label, b); });
+    contactEl = b;
+    messages.appendChild(b);
+    scrollDown();
+  }
+
+  function field(labelText, type, name, auto, max) {
+    var id = 'sfaf-contact-' + name + '-' + (++contactSeq);
+    var l = el('label');
+    l.setAttribute('for', id);
+    l.appendChild(document.createTextNode(labelText));
+    var i = el('input');
+    i.id = id;
+    i.type = type;
+    i.name = name;
+    i.autocomplete = auto;
+    i.maxLength = max;
+    i.required = true;
+    l.appendChild(i);
+    return { label: l, input: i };
+  }
+
+  function showContactForm(label, btn) {
+    var form = el('form', 'sfaf-contact');
+    form.noValidate = true;
+    form.setAttribute('aria-label', label);
+    form.appendChild(el('div', 'sfaf-contact-title', label));
+    form.appendChild(el('p', 'sfaf-contact-note',
+      "We'll attach this chat transcript, and someone will reach out within 1 to 2 business days."));
+    var name = field('Your name', 'text', 'name', 'name', 100);
+    var email = field('Your email', 'email', 'email', 'email', 200);
+    form.appendChild(name.label);
+    form.appendChild(email.label);
+
+    // People never see this field; a bot that fills it in is quietly ignored.
+    var hp = el('div', 'sfaf-contact-hp');
+    hp.setAttribute('aria-hidden', 'true');
+    var hpInput = el('input');
+    hpInput.type = 'text';
+    hpInput.name = 'website';
+    hpInput.tabIndex = -1;
+    hpInput.autocomplete = 'off';
+    hp.appendChild(hpInput);
+    form.appendChild(hp);
+
+    var status = el('p', 'sfaf-contact-status');
+    status.setAttribute('role', 'alert');
+    var actions = el('div', 'sfaf-contact-actions');
+    var send = el('button', 'sfaf-contact-send', 'Send');
+    send.type = 'submit';
+    var cancel = el('button', 'sfaf-contact-cancel', 'Cancel');
+    cancel.type = 'button';
+    actions.appendChild(send);
+    actions.appendChild(cancel);
+    form.appendChild(status);
+    form.appendChild(actions);
+
+    cancel.addEventListener('click', function () {
+      form.replaceWith(btn);
+      contactEl = btn;
+      btn.focus();
+    });
+
+    var mySession = session;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var n = name.input.value.trim();
+      var m = email.input.value.trim();
+      if (!n) { status.textContent = 'Please add your name.'; name.input.focus(); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)) { status.textContent = 'Please check your email address.'; email.input.focus(); return; }
+      status.textContent = '';
+      send.disabled = true;
+      send.textContent = 'Sending…';
+      fetch(CONTACT_URL, requestOptions({
+        name: n, email: m, page: pageAddress(), thread: thread.slice(), website: hpInput.value
+      }))
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (mySession !== session) return;
+          if (!data || !data.ok) {
+            status.textContent = (data && typeof data.error === 'string') ? data.error : ERROR_TEXT;
+            send.disabled = false;
+            send.textContent = 'Send';
+            return;
+          }
+          form.remove();
+          contactEl = null;
+          addBubble('bot', typeof data.message === 'string' ? data.message : 'Thanks. Someone will reach out soon.');
+          focusComposer();
+        })
+        .catch(function () {
+          if (mySession !== session) return;
+          status.textContent = ERROR_TEXT;
+          send.disabled = false;
+          send.textContent = 'Send';
+        });
+    });
+
+    btn.replaceWith(form);
+    contactEl = form;
+    scrollDown();
+    name.input.focus();
   }
 
   /* ============================== VOICE INPUT ============================= */
@@ -1027,6 +1173,7 @@
     noteEl = null;
     startersEl = null;
     alertsEl = null;
+    contactEl = null;
     showTyping(false);
     messages.textContent = '';
     input.value = '';
