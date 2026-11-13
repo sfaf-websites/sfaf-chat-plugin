@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.13.0
+Stable tag: 1.14.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,22 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.14.0 =
+* Every site is crawled, not just sfaf.org. Each site now has its own lane in the
+  indexer's queue and a run takes them in turn, so Tweaker and Cycle to Zero are indexed
+  from the first batch instead of waiting behind sfaf.org's pages.
+* A sitemap index is followed into every child sitemap for every site, and a child given
+  as a relative address is resolved. Tweaker is read from its sitemap_index.xml directly.
+* A change to the list of sites starts a new run on the next call, without waiting 12
+  hours. Updating to this version does the same once.
+* Sitemap problems are kept apart from page errors and shown on their site's row under
+  "Last run's fetch problems": a child sitemap that fails, an HTML page where a sitemap
+  should be (often a bot check), and a sitemap that lists nothing. A site whose sitemaps
+  list nothing keeps the pages it had.
+* The Indexing screen says, per site, how many sitemaps the last run read, how many pages
+  they listed and how many were queued.
+* The per-call time budget now counts sitemap reading too.
 
 = 1.13.0 =
 * A Donate button on donation questions, linking to our donation page with the chat's

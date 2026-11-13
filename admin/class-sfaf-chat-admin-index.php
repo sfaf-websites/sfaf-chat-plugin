@@ -83,7 +83,9 @@ class SFAF_Chat_Admin_Index {
             $counts[ $src ] = ( $counts[ $src ] ?? 0 ) + 1;
         }
         $state   = SFAF_Chat_Indexer::state();
-        $errors  = (array) ( $state['errors'] ?? array() );
+        // Sitemap problems first: they explain a site's 0 better than any page error.
+        $errors  = array_merge( (array) ( $state['sitemap_errors'] ?? array() ), (array) ( $state['errors'] ?? array() ) );
+        $summary = (array) ( $state['sites'] ?? array() );
         $extra   = SFAF_Chat_Extra_Urls::all();
         $labels  = array( 'pending' => 'Waiting for the next fetch', 'ok' => 'Indexed', 'dead' => 'Dead: dropped from the index' );
         $form    = function ( $action, $label, $class = 'button', $hidden = array() ) {
@@ -108,14 +110,28 @@ class SFAF_Chat_Admin_Index {
                 <tbody>
                     <?php foreach ( SFAF_Chat_Indexer::configured_sites() as $site ) :
                         $mine = array_values( array_filter( $errors, function ( $e ) use ( $site ) {
+                            if ( isset( $e['source'] ) ) {
+                                return $e['source'] === $site['source'];
+                            }
+                            // Saved before errors carried their site: match by host.
                             $host = (string) parse_url( (string) ( $e['url'] ?? '' ), PHP_URL_HOST );
                             return '' !== $host && false !== strpos( $host, $site['source'] );
-                        } ) ); ?>
+                        } ) );
+                        $sum  = (array) ( $summary[ $site['source'] ] ?? array() ); ?>
                         <tr>
                             <td><strong><?php echo esc_html( $site['name'] ); ?></strong></td>
                             <td><code><?php echo esc_html( $site['source'] ); ?></code></td>
                             <td><?php echo implode( '<br>', array_map( function ( $u ) { return '<code>' . esc_html( $u ) . '</code>'; }, $site['sitemaps'] ) ); ?></td>
-                            <td><?php echo (int) ( $counts[ $site['source'] ] ?? 0 ); ?></td>
+                            <td><?php echo (int) ( $counts[ $site['source'] ] ?? 0 ); ?>
+                                <?php if ( $sum ) : ?>
+                                    <br><span class="description"><?php echo esc_html( sprintf(
+                                        'Last run: %d sitemap%s read, %d page%s listed, %d queued.',
+                                        (int) ( $sum['sitemaps_read'] ?? 0 ), 1 === (int) ( $sum['sitemaps_read'] ?? 0 ) ? '' : 's',
+                                        (int) ( $sum['listed'] ?? 0 ), 1 === (int) ( $sum['listed'] ?? 0 ) ? '' : 's',
+                                        (int) ( $sum['queued'] ?? 0 )
+                                    ) ); ?></span>
+                                <?php endif; ?>
+                            </td>
                             <td><?php
                                 if ( ! $mine ) {
                                     echo 'None';

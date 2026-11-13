@@ -7,13 +7,19 @@
  *  or GET /wp-json/sfaf-chat/v1/index?token=<token>
  *
  * What it does:
- *   1. Reads each site's sitemap (sitemap indexes are followed).
+ *   1. Reads each site's sitemap. A sitemap index is followed into every child
+ *      sitemap it lists, for every site. A sitemap that fails, is not a sitemap,
+ *      or lists nothing is recorded as that site's fetch problem.
  *   2. Queues only pages that are new, or whose sitemap <lastmod> changed since
- *      they were last indexed. Pages gone from the sitemap are dropped.
- *   3. Each call processes ONE BATCH (BATCH_SIZE pages or TIME_BUDGET seconds,
- *      whichever comes first) and reports {done, remaining}. The scheduler simply
- *      calls it repeatedly; once the run is done, further calls are cheap no-ops
- *      until MIN_RUN_INTERVAL has passed and a new run starts.
+ *      they were last indexed. Pages gone from the sitemap are dropped. Each site
+ *      has its own lane and the queue takes them in turn, so a big site (sfaf.org)
+ *      can never hold the others back until it is finished.
+ *   3. Each call processes ONE BATCH (BATCH_SIZE pages, or TIME_BUDGET seconds from
+ *      the start of the call, sitemap reading included, whichever comes first) and
+ *      reports {done, remaining}. The scheduler simply calls it repeatedly; once
+ *      the run is done, further calls are cheap no-ops until MIN_RUN_INTERVAL has
+ *      passed and a new run starts. A change to the list of sites, or to how runs
+ *      are planned (PLAN_VERSION), starts a new run at once.
  *   4. For each page: fetch, strip nav/header/footer/scripts to clean text, pull
  *      og:title / og:description / og:image, write one record.
  *
@@ -41,6 +47,7 @@ class SFAF_Chat_Indexer {
     const POLITE_DELAY_MS  = 250;         // pause between page fetches
     const USER_AGENT       = 'SFAF-Chat-Indexer/1.0 (+https://resources.sfaf.org/chat/)';
     const THIN_PAGE_WORDS  = 60;          // below this, a page's JSON-LD supplies its text
+    const PLAN_VERSION     = 2;           // bump when planning changes, so the next call plans afresh
 
     /**
      * Sites to index. Each record is tagged with 'source' so the endpoint can
@@ -74,16 +81,15 @@ class SFAF_Chat_Indexer {
              * OTHER SITES. Their pages are answered from as another site's, never in
              * SFAF's voice: see SFAF_Chat_Endpoint, OTHER SITES. Probed 2026-11-11.
              *
-             * tweaker.org: its sitemap.xml is a static file listing only the home
-             * page, and the site answered 503 "Briefly unavailable for scheduled
-             * maintenance" to everything else. WordPress's own wp-sitemap.xml is
-             * tried first for the day it is back; until then a run indexes nothing
-             * from it and records the error on the Indexing screen.
+             * tweaker.org (checked 2026-11-13): Yoast's sitemap_index.xml, an index
+             * whose one child, page-sitemap.xml, lists the pages. wp-sitemap.xml now
+             * only redirects there, and sitemap.xml is a stale static file listing
+             * the home page alone, so neither is read.
              */
             array(
-                'source'   => 'tweaker.org',
-                'name'     => 'Tweaker',
-                'sitemaps' => array( 'https://tweaker.org/wp-sitemap.xml', 'https://tweaker.org/sitemap.xml' ),
+                'source'  => 'tweaker.org',
+                'name'    => 'Tweaker',
+                'sitemap' => 'https://tweaker.org/sitemap_index.xml',
             ),
             array(
                 'source'  => 'cycletozero.org',
@@ -121,7 +127,7 @@ class SFAF_Chat_Indexer {
             $out[] = array(
                 'source'   => (string) ( $site['source'] ?? '' ),
                 'name'     => self::site_name( (string) ( $site['source'] ?? '' ) ),
-                'sitemaps' => array_values( (array) ( $site['sitemaps'] ?? array( $site['sitemap'] ?? '' ) ) ),
+                'sitemaps' => self::site_sitemaps( $site ),
             );
         }
         return $out;
@@ -219,7 +225,9 @@ class SFAF_Chat_Indexer {
 
     /** One batch. */
     private static function run( $force ) {
-        $sites = self::sites();
+        $call_start = microtime( true );
+        $sites      = self::sites();
+        $signature  = self::plan_signature( $sites );
 
         $state = get_option( self::STATE_OPTION, array() );
         $state = is_array( $state ) ? $state : array();
@@ -237,26 +245,39 @@ class SFAF_Chat_Indexer {
         $started     = false;
         $plan_errors = array();
 
+        // The sites, or the way a run is planned, changed since the last plan: the
+        // queue in hand was built without them, so plan again now rather than
+        // finishing it and then waiting MIN_RUN_INTERVAL. Nothing is lost: what was
+        // still queued is still new or changed, so the new plan queues it again.
+        $replan = ( $state['plan_sig'] ?? '' ) !== $signature;
+
         $run_due = $force
             || empty( $state['run_completed'] )
             || ( time() - (int) $state['run_completed'] ) >= self::MIN_RUN_INTERVAL;
 
-        if ( array() === $queue && $run_due && empty( $state['run_started_open'] ) ) {
-            list( $queue, $records, $plan_errors ) = self::plan_run( $sites, $records );
+        if ( $replan || ( array() === $queue && $run_due && empty( $state['run_started_open'] ) ) ) {
+            list( $queue, $records, $plan_errors, $summary ) = self::plan_run( $sites, $records );
             $state = array(
                 'run_started'      => time(),
                 'run_started_open' => true,
                 'run_completed'    => $state['run_completed'] ?? null,
+                'plan_sig'         => $signature,
                 'queued'           => count( $queue ),
                 'queue'            => $queue,
-                'errors'           => $plan_errors,
+                'sites'            => $summary,
+                // Kept apart from page errors, so a run's many page errors can never
+                // push a site's sitemap problem off the list.
+                'sitemap_errors'   => $plan_errors,
+                'errors'           => array(),
             );
             $started = true;
         }
 
         $processed = 0;
         $errors    = array();
-        $deadline  = microtime( true ) + self::TIME_BUDGET;
+        // Counted from the start of the call, so reading every sitemap and then a
+        // full batch can't add up to more than one request should take.
+        $deadline  = $call_start + self::TIME_BUDGET;
 
         while ( array() !== $queue ) {
             if ( $processed >= self::BATCH_SIZE || microtime( true ) >= $deadline ) {
@@ -270,7 +291,7 @@ class SFAF_Chat_Indexer {
             } else {
                 // Keep any previous version of the page rather than losing it to a
                 // transient failure; it'll be retried on the next run.
-                $errors[] = array( 'url' => $item['url'], 'error' => $rec );
+                $errors[] = array( 'url' => $item['url'], 'error' => $rec, 'source' => (string) ( $item['source'] ?? '' ) );
             }
             if ( ! empty( $item['extra'] ) ) {
                 $status = SFAF_Chat_Extra_Urls::report( $item['url'], is_array( $rec ) ? '' : (string) $rec, is_array( $rec ) ? $rec['title'] : '' );
@@ -317,23 +338,67 @@ class SFAF_Chat_Indexer {
     }
 
     /**
+     * What a plan depends on: the sites and their sitemaps, exclusions and types,
+     * and PLAN_VERSION. When it changes, the next call plans a new run at once.
+     */
+    private static function plan_signature(array $sites): string
+    {
+        $parts = [];
+        foreach ($sites as $site) {
+            $parts[] = [
+                (string)($site['source'] ?? ''),
+                self::site_sitemaps($site),
+                (array)($site['exclude'] ?? []),
+                (array)($site['types'] ?? []),
+            ];
+        }
+        return md5(self::PLAN_VERSION . '|' . serialize($parts));
+    }
+
+    /** A site's sitemap URLs, from 'sitemaps' or 'sitemap'. */
+    private static function site_sitemaps(array $site): array
+    {
+        return array_values(array_filter(array_map('strval', (array)($site['sitemaps'] ?? [$site['sitemap'] ?? '']))));
+    }
+
+    /**
      * Read every site's sitemap(s) and decide what to (re)index.
-     * Returns [queue, records-with-removals-applied, errors].
+     * Returns [queue, records-with-removals-applied, errors, per-site summary].
+     *
+     * Each error carries its site's source, so the Indexing screen shows it on that
+     * site's row. The summary says, per site, how many sitemaps were read, how many
+     * pages they listed and how many were queued, so a 0 can always be explained.
      */
     private static function plan_run(array $sites, array $records): array
     {
-        $queue  = [];
-        $errors = [];
-        $seen   = [];
+        $lanes   = [];
+        $errors  = [];
+        $seen    = [];
+        $summary = [];
 
         foreach ($sites as $site) {
-            $source = (string)($site['source'] ?? '');
-            $urls   = [];
-            $ok     = true;
-            foreach ((array)($site['sitemaps'] ?? [$site['sitemap'] ?? '']) as $sitemap) {
-                $ok = self::read_sitemap((string)$sitemap, $urls, $errors) && $ok;
+            $source   = (string)($site['source'] ?? '');
+            $sitemaps = self::site_sitemaps($site);
+            $urls     = [];
+            $errs     = [];
+            $read     = 0;
+            $ok       = $sitemaps !== [];
+            foreach ($sitemaps as $sitemap) {
+                $ok = self::read_sitemap($sitemap, $urls, $errs, 0, $read) && $ok;
+            }
+            // Sitemaps that load but list no page at all are never taken at face
+            // value: that is reported, and none of the site's pages are dropped.
+            if ($urls === []) {
+                $ok = false;
+                if ($errs === []) {
+                    $errs[] = ['url' => $sitemaps[0] ?? '', 'error' => 'the sitemaps list no pages'];
+                }
+            }
+            foreach ($errs as $e) {
+                $errors[] = $e + ['source' => $source];
             }
 
+            $lane = [];
             foreach ($urls as $url => $lastmod) {
                 if (self::matches_any($url, (array)($site['exclude'] ?? []))) {
                     continue;
@@ -359,9 +424,17 @@ class SFAF_Chat_Indexer {
                     || ($lastmod === null && (time() - strtotime((string)($prev['indexed'] ?? '1970-01-01'))) > 7 * 86400);
 
                 if ($changed) {
-                    $queue[] = ['url' => $url, 'lastmod' => $lastmod, 'source' => $source, 'type' => $type];
+                    $lane[] = ['url' => $url, 'lastmod' => $lastmod, 'source' => $source, 'type' => $type];
                 }
             }
+            $lanes[] = $lane;
+
+            $summary[$source] = [
+                'sitemaps_read' => $read,
+                'listed'        => count($urls),
+                'queued'        => count($lane),
+                'complete'      => $ok,
+            ];
 
             // Drop pages that left this site's sitemap, but only if every sitemap for
             // the site was read successfully, so a transient error can't wipe the index.
@@ -376,27 +449,50 @@ class SFAF_Chat_Indexer {
         }
 
         // Pages added by hand (SFAF_Chat_Extra_Urls): fetched every run, so daily.
-        // One taken off the list, or dead, leaves the index.
+        // One taken off the list, or dead, leaves the index. They get a lane too.
         $live = class_exists('SFAF_Chat_Extra_Urls') ? SFAF_Chat_Extra_Urls::live() : [];
         foreach ($records as $url => $r) {
             if (!empty($r['extra']) && !in_array($url, $live, true)) {
                 unset($records[$url]);
             }
         }
+        $lane = [];
         foreach ($live as $url) {
             if (!isset($seen[$url])) {
-                $queue[] = ['url' => $url, 'lastmod' => null, 'source' => SFAF_Chat_Extra_Urls::source_for($url), 'type' => 'page', 'extra' => true];
+                $lane[] = ['url' => $url, 'lastmod' => null, 'source' => SFAF_Chat_Extra_Urls::source_for($url), 'type' => 'page', 'extra' => true];
             }
         }
+        $lanes[] = $lane;
 
-        return [$queue, $records, $errors];
+        return [self::interleave($lanes), $records, $errors, $summary];
     }
 
     /**
-     * Collect url => lastmod from a sitemap, following sitemap indexes (depth-limited).
-     * Returns false if any sitemap in the tree failed to load.
+     * One queue from the sites' lanes, one page from each in turn:
+     * [a1, a2, a3], [b1], [c1, c2] gives a1, b1, c1, a2, c2, a3.
      */
-    private static function read_sitemap(string $sitemapUrl, array &$urls, array &$errors, int $depth = 0): bool
+    private static function interleave(array $lanes): array
+    {
+        $queue = [];
+        $lanes = array_values(array_filter($lanes));
+        for ($i = 0; $lanes !== []; $i++) {
+            foreach ($lanes as $k => $lane) {
+                if (isset($lane[$i])) {
+                    $queue[] = $lane[$i];
+                } else {
+                    unset($lanes[$k]);
+                }
+            }
+        }
+        return $queue;
+    }
+
+    /**
+     * Collect url => lastmod from a sitemap, following a sitemap index into every
+     * child sitemap it lists (depth-limited). $read counts the sitemaps that loaded.
+     * Returns false if any sitemap in the tree failed to load or was not a sitemap.
+     */
+    private static function read_sitemap(string $sitemapUrl, array &$urls, array &$errors, int $depth = 0, int &$read = 0): bool
     {
         if ($sitemapUrl === '' || $depth > 2) {
             return false;
@@ -408,28 +504,47 @@ class SFAF_Chat_Indexer {
             return false;
         }
 
-        $doc = new DOMDocument();
+        // A bot check or an error page can answer 200 with HTML, which may even
+        // parse as XML. Say so plainly either way.
+        $html = 'not a sitemap: got an HTML page (a bot check?)';
+        $doc  = new DOMDocument();
         if (!@$doc->loadXML($body, LIBXML_NONET | LIBXML_NOCDATA)) {
-            $errors[] = ['url' => $sitemapUrl, 'error' => 'invalid sitemap XML'];
+            $errors[] = ['url' => $sitemapUrl, 'error' => preg_match('#^\s*(<!doctype\s+html|<html)#i', $body) ? $html : 'invalid sitemap XML'];
             return false;
         }
+        $root = $doc->documentElement ? strtolower((string)$doc->documentElement->localName) : '';
+        if ($root === 'html') {
+            $errors[] = ['url' => $sitemapUrl, 'error' => $html];
+            return false;
+        }
+        if ($root !== 'sitemapindex' && $root !== 'urlset') {
+            $errors[] = ['url' => $sitemapUrl, 'error' => 'not a sitemap (its root element is <' . ($root ?: 'none') . '>)'];
+            return false;
+        }
+        $read++;
 
         $ok = true;
 
-        // Sitemap index → recurse into each child sitemap.
+        // Sitemap index: follow each child sitemap.
+        $children = 0;
         foreach ($doc->getElementsByTagNameNS('*', 'sitemap') as $sm) {
             $loc = trim((string)($sm->getElementsByTagNameNS('*', 'loc')->item(0)->textContent ?? ''));
-            if ($loc !== '') {
-                // Yoast writes child sitemap locs as http:// even on an https site;
-                // keep them on https when the parent was fetched over https.
-                if (stripos($sitemapUrl, 'https://') === 0) {
-                    $loc = preg_replace('#^http://#i', 'https://', $loc);
-                }
-                $ok = self::read_sitemap($loc, $urls, $errors, $depth + 1) && $ok;
+            if ($loc === '') {
+                continue;
             }
+            // A child written relative to its index is resolved against it.
+            $loc = self::absolutize($loc, $sitemapUrl);
+            // Yoast writes child sitemap locs as http:// even on an https site;
+            // keep them on https when the parent was fetched over https.
+            if (stripos($sitemapUrl, 'https://') === 0) {
+                $loc = preg_replace('#^http://#i', 'https://', $loc);
+            }
+            $children++;
+            $ok = self::read_sitemap($loc, $urls, $errors, $depth + 1, $read) && $ok;
         }
 
-        // Plain sitemap → url entries.
+        // Plain sitemap: url entries.
+        $listed = 0;
         foreach ($doc->getElementsByTagNameNS('*', 'url') as $u) {
             $loc = trim((string)($u->getElementsByTagNameNS('*', 'loc')->item(0)->textContent ?? ''));
             if ($loc === '' || !preg_match('#^https?://#i', $loc)) {
@@ -437,6 +552,14 @@ class SFAF_Chat_Indexer {
             }
             $lm = $u->getElementsByTagNameNS('*', 'lastmod')->item(0);
             $urls[$loc] = $lm ? trim($lm->textContent) : null;
+            $listed++;
+        }
+
+        // An index with no children, or a sitemap with no pages, is reported. On its
+        // own it doesn't fail the site; a site whose sitemaps list nothing at all
+        // does (see plan_run).
+        if ($children === 0 && $listed === 0) {
+            $errors[] = ['url' => $sitemapUrl, 'error' => $root === 'sitemapindex' ? 'sitemap index lists no child sitemaps' : 'sitemap lists no pages'];
         }
 
         return $ok;
@@ -448,6 +571,12 @@ class SFAF_Chat_Indexer {
      */
     private static function http_get(string $url, string $want): array
     {
+        // Tests answer from fixtures here, with no network. Nothing else hooks it.
+        $pre = apply_filters('sfaf_chat_index_pre_fetch', null, $url, $want);
+        if (is_array($pre) && count($pre) === 2) {
+            return array_values($pre);
+        }
+
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
