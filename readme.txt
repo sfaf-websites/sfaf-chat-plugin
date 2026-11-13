@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.14.0
+Stable tag: 1.15.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,29 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.15.0 =
+* Other sites win on their own subject. A question about Cycle to Zero, or about meth and
+  Tweaker, gets that site's pages in their own section ahead of ours, so a page of ours
+  that only mentions the subject no longer outranks the site. A short follow-up keeps the
+  subject. Each site's subjects are listed with its sitemap.
+* "Contact our team" is offered less: only when the answer gave no phone number or email,
+  and the person seems to want to reach someone or the question was not fully answered.
+  The model judges both for each question; the threshold is one setting in the code.
+* The assistant no longer uses the name Magnet, which is now part of Strut, and does not
+  explain the change unless asked about Magnet.
+* Meth questions are answered by intent: Tweaker for what meth is and safer use, the
+  Stonewall Project for help cutting down or quitting, both when someone wants options.
+* Appointment booking in the chat. The appointment chooser (four Strut visits: express
+  sexual health screening, sexual health screening with an RN, PrEP enrollment, PrEP
+  follow-up express) now comes with the chat on every page that has it, with nothing to
+  paste. When someone wants to book one of those four, the reply has a "Make an
+  appointment" button that opens it. Other appointment types never get it.
+* The chooser is added exactly as supplied, healow links unchanged, and only when the page
+  doesn't already have one. It opens above the chat. Its Geologica and Young Serif fonts
+  are loaded from Google Fonts only when a booking button appears and the page doesn't
+  have them; otherwise its own fallback fonts apply.
+* No "Contact our team" button beside a booking button.
 
 = 1.14.0 =
 * Every site is crawled, not just sfaf.org. Each site now has its own lane in the

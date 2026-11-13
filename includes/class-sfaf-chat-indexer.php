@@ -87,14 +87,17 @@ class SFAF_Chat_Indexer {
              * the home page alone, so neither is read.
              */
             array(
-                'source'  => 'tweaker.org',
-                'name'    => 'Tweaker',
-                'sitemap' => 'https://tweaker.org/sitemap_index.xml',
+                'source'   => 'tweaker.org',
+                'name'     => 'Tweaker',
+                'sitemap'  => 'https://tweaker.org/sitemap_index.xml',
+                // Subjects this site is dedicated to: see subject_sources().
+                'subjects' => array( 'tweaker', 'meth', 'crystal meth', 'methamphetamine', 'chemsex', 'party and play', 'pnp' ),
             ),
             array(
-                'source'  => 'cycletozero.org',
-                'name'    => 'Cycle to Zero',
-                'sitemap' => 'https://2027.cycletozero.org/sitemap_index.xml',
+                'source'   => 'cycletozero.org',
+                'name'     => 'Cycle to Zero',
+                'sitemap'  => 'https://2027.cycletozero.org/sitemap_index.xml',
+                'subjects' => array( 'cycle to zero', 'cycletozero', 'ctz' ),
                 'exclude' => array(
                     '#/home-3/#',                    // a duplicate of the home page
                     '#/title-of-upcoming-ride/#',    // a placeholder event
@@ -118,6 +121,29 @@ class SFAF_Chat_Indexer {
             }
         }
         return self::is_own( $source ) ? 'SFAF' : (string) $source;
+    }
+
+    /**
+     * Sites whose subject this text names, in config order: a site's 'subjects'
+     * are whole words or phrases ("cycle to zero", "meth"), matched without case or
+     * punctuation, so "meth" never matches "method" and "tweaker.org" matches
+     * "tweaker". Only sites other than SFAF's own carry subjects.
+     *
+     * @return string[] sources
+     */
+    public static function subject_sources( $text ) {
+        $norm = ' ' . trim( preg_replace( '/[^a-z0-9]+/', ' ', strtolower( (string) $text ) ) ) . ' ';
+        $out  = array();
+        foreach ( self::sites() as $site ) {
+            foreach ( (array) ( $site['subjects'] ?? array() ) as $phrase ) {
+                $p = trim( preg_replace( '/[^a-z0-9]+/', ' ', strtolower( (string) $phrase ) ) );
+                if ( '' !== $p && false !== strpos( $norm, ' ' . $p . ' ' ) ) {
+                    $out[] = (string) $site['source'];
+                    break;
+                }
+            }
+        }
+        return $out;
     }
 
     /** Every configured site, for the Indexing screen. */

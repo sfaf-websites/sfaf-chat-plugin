@@ -3,11 +3,16 @@
  * "Contact our team": a visitor leaves a name and an email, and the chat
  * transcript goes by email to the team for the page they were on.
  *
- * WHEN IT IS OFFERED. Server-side, from the reply's topic: a question about a
- * service, a program or getting help (SERVICE_TOPICS). Never on a crisis reply,
- * which points to a person by phone, and never off-topic. Never unless the form
- * is switched on, a Postmark token is saved and a default recipient is set. The
- * model is not asked, so the Gemini request is unchanged.
+ * WHEN IT IS OFFERED (1.15.0, interim rule; tune it in OFFER_RULE). The model
+ * judges each question and returns two answers with its reply: "wants_person"
+ * (the message suggests they want to reach someone) and "fully_answered". The
+ * button shows only when the reply gave no direct contact (a phone number or an
+ * email address, found in the answer the visitor sees) AND the person may want
+ * someone or the question was not fully answered. On top of that, as before: a
+ * question about a service, a program or getting help (SERVICE_TOPICS), never on
+ * a crisis reply, which points to a person by phone, and never off-topic. Never
+ * unless the form is switched on, a Postmark token is saved and a default
+ * recipient is set.
  *
  * WHERE IT GOES. The page the question was asked on is matched against the
  * routes (same patterns as Suggested Questions: a path, /x/* or a full URL), first
@@ -52,6 +57,26 @@ class SFAF_Chat_Contact {
         'trans-health', 'substance-use', 'harm-reduction', 'overdose', 'mental-health', 'support-groups',
         'aging', 'black-health', 'latine-health', 'housing-benefits', 'insurance-billing', 'contact',
     );
+
+    /*
+     * When the button shows, beyond the gates in offer(). The threshold lives here:
+     *   skip_if_contact_given     no button when the answer already has a phone or email
+     *   skip_if_booking_link      no button when the answer has the booking link, which
+     *                             is already a way through to a person
+     *   when_wants_person         show it when the model says they want to reach someone
+     *   when_not_fully_answered   show it when the model says the answer fell short, or
+     *                             flagged the question "unanswered"
+     * Both "when_" off means it never shows; both on is today's rule.
+     */
+    const OFFER_RULE = array(
+        'skip_if_contact_given'   => true,
+        'skip_if_booking_link'    => true,
+        'when_wants_person'       => true,
+        'when_not_fully_answered' => true,
+    );
+
+    /** A phone number (415-487-3000, (415) 487-3000, 415.487.3000) or an email address. */
+    const DIRECT_CONTACT = '/(?:\(\d{3}\)\s*|\b\d{3}[\s.\-])\d{3}[\s.\-]\d{4}\b|[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i';
 
     /** Threats and targeted abuse. Kept short and plain on purpose. */
     const ABUSE_PATTERNS = array(
@@ -109,18 +134,36 @@ class SFAF_Chat_Contact {
 
     /**
      * The button for a reply, or null. Same team text the form will name.
+     * $answer is the text the visitor is shown (after any pinned answer);
+     * $wants_person and $fully_answered are the model's judgment of the question.
      *
      * @return array{label:string}|null
      */
-    public static function offer( $topic, $flag, $page ) {
+    public static function offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered ) {
         if ( ! self::ready() || 'crisis' === $flag || 'out_of_scope' === $flag ) {
             return null;
         }
         if ( ! in_array( (string) $topic, self::SERVICE_TOPICS, true ) ) {
             return null;
         }
+        if ( ! self::wanted( (string) $answer, (bool) $wants_person, (bool) $fully_answered && 'unanswered' !== $flag ) ) {
+            return null;
+        }
         list( $team ) = self::route_for( $page );
         return array( 'label' => self::label( $team ) );
+    }
+
+    /** OFFER_RULE applied to one reply. */
+    public static function wanted( $answer, $wants_person, $fully_answered ) {
+        $rule = self::OFFER_RULE;
+        if ( $rule['skip_if_contact_given'] && preg_match( self::DIRECT_CONTACT, (string) $answer ) ) {
+            return false;
+        }
+        if ( $rule['skip_if_booking_link'] && false !== strpos( (string) $answer, '](#sfaf-appointments)' ) ) {
+            return false;
+        }
+        return ( $rule['when_wants_person'] && $wants_person )
+            || ( $rule['when_not_fully_answered'] && ! $fully_answered );
     }
 
     /** Is any of this text a threat or targeted abuse? */

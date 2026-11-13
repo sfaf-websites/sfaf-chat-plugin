@@ -201,6 +201,10 @@
     '#sfaf-chat .sfaf-msg a.sfaf-tel{color:inherit;text-decoration:underline;',
     '  text-underline-offset:2px;font-weight:600;}',
     '#sfaf-chat a.sfaf-tel{white-space:nowrap;}',
+    '#sfaf-chat .sfaf-msg a.sfaf-appt-link{display:inline-block;margin:6px 0 2px;padding:7px 14px;',
+    '  background:var(--sfaf-accent);color:var(--sfaf-on-accent);border-radius:var(--sfaf-radius);',
+    '  font-weight:600;text-decoration:none;white-space:nowrap;}',
+    '#sfaf-chat .sfaf-msg a.sfaf-appt-link:hover{background:var(--sfaf-accent-hover);}',
 
     // A note from the widget itself, such as a voice message. Not part of the conversation.
     '#sfaf-chat .sfaf-note{align-self:stretch;font-size:13.5px;color:var(--sfaf-muted);padding:2px 0 2px 12px;',
@@ -568,9 +572,56 @@
 
   // Plain text, with US phone numbers turned into tap-to-call links.
   var PHONE_RE = /(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})/g;
-  // Text with phone numbers as tap-to-call links, and **bold** as <strong>. Built from
-  // text nodes only: nothing in a reply is ever parsed as HTML.
+  /*
+   * The appointment chooser (served with this script, see SFAF_Chat_Widget::
+   * appointments()). A reply's [label](#sfaf-appointments) becomes a link to it, and
+   * the chooser's own document click listener opens it. Only that exact target:
+   * any other [label](address) stays plain text, so a reply still can't carry a URL.
+   */
+  var APPT_RE = /\[([^\]\n]{1,60})\]\(#sfaf-appointments\)/;
+  var APPT_FONTS = 'https://fonts.googleapis.com/css2?family=Geologica:wght@400;700&family=Young+Serif&display=swap';
+  var apptFontsAsked = false;
+
+  // The chooser is styled in Geologica and Young Serif and expects the page to have
+  // them. Fetched only when a booking link is shown, and only if the page lacks
+  // them; blocked or offline, its own fallbacks (Helvetica/Arial, Georgia) apply.
+  function apptFonts() {
+    if (apptFontsAsked) return;
+    apptFontsAsked = true;
+    var have = {};
+    try {
+      document.fonts.forEach(function (f) { have[String(f.family).replace(/["']/g, '')] = true; });
+    } catch (e) { /* no FontFaceSet: load them */ }
+    if ((have.Geologica && have['Young Serif']) || document.getElementById('sfaf-appt-fonts')) return;
+    var l = document.createElement('link');
+    l.id = 'sfaf-appt-fonts';
+    l.rel = 'stylesheet';
+    l.href = APPT_FONTS;
+    document.head.appendChild(l);
+  }
+
+  function apptLink(label) {
+    var a = el('a', 'sfaf-appt-link', label);
+    a.href = '#sfaf-appointments';
+    a.addEventListener('click', function (e) {
+      // Without the chooser on the page, stay put rather than jump to a hash.
+      if (!window.SFAFAppointments) e.preventDefault();
+    });
+    apptFonts();
+    return a;
+  }
+
+  // Text with booking links, phone numbers as tap-to-call links, and **bold** as
+  // <strong>. Built from text nodes only: nothing in a reply is ever parsed as HTML.
   function inline(node, text) {
+    var parts = String(text).split(APPT_RE);
+    for (var i = 0; i < parts.length; i++) {
+      if (i % 2 === 1) node.appendChild(apptLink(parts[i]));
+      else if (parts[i]) inlineText(node, parts[i]);
+    }
+  }
+
+  function inlineText(node, text) {
     var bold = String(text).split(/\*\*([^*\n]+)\*\*/);
     for (var b = 0; b < bold.length; b++) {
       var target = node;

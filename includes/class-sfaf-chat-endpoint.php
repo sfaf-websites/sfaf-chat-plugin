@@ -61,6 +61,16 @@ class SFAF_Chat_Endpoint {
     const OTHER_TOP_N         = 4;
 
     /*
+     * SITE FOR THIS SUBJECT. When the question names a subject another site is
+     * dedicated to (SFAF_Chat_Indexer 'subjects': Cycle to Zero, meth), up to this
+     * many of that site's pages go in their own section ahead of RELATED PAGES.
+     * The current question decides; a short follow-up ("how do I sign up?") also
+     * looks at the previous one. See subject_sources().
+     */
+    const SUBJECT_TOP_N       = 5;
+    const FOLLOW_UP_WORDS     = 8;
+
+    /*
      * DONATE BUTTON. Only on a donation question that was answered (topic "donate",
      * in scope, no flag), never on a refusal or a crisis. It links to the donate page
      * with the chat's UTM tags; the chat never touches payment. The page is the
@@ -394,9 +404,10 @@ class SFAF_Chat_Endpoint {
 
         // Tier 2: indexed pages, pre-filtered by keyword overlap with the question.
         // Blog posts (type "post") are ranked separately, as a lower tier: see POST_TOP_N.
-        $related     = array();
-        $other_pages = array();
-        $posts       = array();
+        $related       = array();
+        $other_pages   = array();
+        $subject_pages = array();
+        $posts         = array();
         $post_titles = array();
         $query       = array();
         $index       = SFAF_Chat_Core::read_json( SFAF_Chat_Core::index_path() );
@@ -438,8 +449,28 @@ class SFAF_Chat_Endpoint {
                 $query[ $tok ] = 1.0;
             }
 
+            // A question about a subject another site is dedicated to (Cycle to Zero,
+            // meth and Tweaker): that site's pages go in their own section, ahead of
+            // ours, so a page of ours that only mentions the subject can't bury them.
+            $subject_sources = self::subject_sources( $question, $user_turns );
+            $mine            = array();
+            foreach ( $other_candidates as $k => $r ) {
+                if ( in_array( (string) ( $r['source'] ?? '' ), $subject_sources, true ) ) {
+                    $mine[] = $r;
+                    unset( $other_candidates[ $k ] );
+                }
+            }
+            $subject_pages = SFAF_Chat_Core::rank_records( $mine, $query, self::SUBJECT_TOP_N );
+            if ( array() === $subject_pages && array() !== $mine ) {
+                // Nothing scored ("what is it?"): the site's home page, its shortest address.
+                usort( $mine, function ( $a, $b ) {
+                    return strlen( (string) $a['url'] ) - strlen( (string) $b['url'] );
+                } );
+                $subject_pages = array( $mine[0] );
+            }
+
             $related     = SFAF_Chat_Core::rank_records( $candidates, $query, self::PREFILTER_TOP_N );
-            $other_pages = SFAF_Chat_Core::rank_records( $other_candidates, $query, self::OTHER_TOP_N );
+            $other_pages = SFAF_Chat_Core::rank_records( array_values( $other_candidates ), $query, self::OTHER_TOP_N );
             $ranked      = SFAF_Chat_Core::rank_records( $post_candidates, $query, self::POST_TOP_N + self::POST_TITLES_N );
             $posts       = array_slice( $ranked, 0, self::POST_TOP_N );
             $post_titles = array_slice( $ranked, self::POST_TOP_N );
@@ -471,7 +502,7 @@ class SFAF_Chat_Endpoint {
 
         // Every record the model can see, and therefore the ONLY ids it can link to.
         $record_map = array();
-        foreach ( array_merge( $core, $related, $other_pages, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ), null === $program ? array() : array( $program ) ) as $r ) {
+        foreach ( array_merge( $core, $related, $subject_pages, $other_pages, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ), null === $program ? array() : array( $program ) ) as $r ) {
             $record_map[ $r['id'] ] = $r;
         }
 
@@ -530,6 +561,21 @@ class SFAF_Chat_Endpoint {
             . "Never infer, guess, or calculate dates yourself.\n\n"
             . "## KNOWLEDGE BASE (curated)\n"
             . json_encode( array_map( $for_model, $core ), $enc );
+
+        if ( array() !== $subject_pages ) {
+            $names = array_values( array_unique( array_map( function ( $r ) {
+                return SFAF_Chat_Indexer::site_name( (string) ( $r['source'] ?? '' ) );
+            }, $subject_pages ) ) );
+            $system_instruction .= "\n\n## SITE FOR THIS SUBJECT\n"
+                . 'This question is about a subject that ' . implode( ' and ', $names ) . ' is dedicated to. '
+                . "Its pages below are usually the best source and the best link for it, better than a page of "
+                . "ours that only mentions the subject. When one of them answers the question, use it and link "
+                . "it, naming the site as the rules for other sites say. Use our own page instead only when it "
+                . "answers something these don't, such as one of our services.\n"
+                . json_encode( array_map( function ( array $r ) use ( $for_model ) {
+                    return $for_model( $r ) + array( 'site' => SFAF_Chat_Indexer::site_name( (string) ( $r['source'] ?? '' ) ) );
+                }, $subject_pages ), $enc );
+        }
 
         if ( array() !== $related ) {
             $system_instruction .= "\n\n## RELATED PAGES (site search results for this question)\n"
@@ -641,6 +687,9 @@ class SFAF_Chat_Endpoint {
                         'in_scope' => array( 'type' => 'boolean' ),
                         'flag'     => array( 'type' => 'string', 'nullable' => true ),
                         'topic'    => array( 'type' => 'string' ),
+                        // For the "Contact our team" button: see SFAF_Chat_Contact::OFFER_RULE.
+                        'wants_person'   => array( 'type' => 'boolean' ),
+                        'fully_answered' => array( 'type' => 'boolean' ),
                     ),
                     'required'   => array( 'answer', 'in_scope', 'topic' ),
                 ),
@@ -750,6 +799,11 @@ class SFAF_Chat_Endpoint {
         $answered_in_scope = (bool) ( $parsed['in_scope'] ?? true );
         $answer            = (string) $parsed['answer'];
 
+        // The model's judgment for the contact button. Missing or not a boolean reads
+        // as "no reason to offer it", so a reply that skips them never adds a button.
+        $wants_person   = true === ( $parsed['wants_person'] ?? null );
+        $fully_answered = false !== ( $parsed['fully_answered'] ?? true );
+
         // A declined or crisis reply never points to a blog post: a post is a story or a
         // perspective, not a next step, and it may be out of date. The answer still goes.
         if ( null !== $link_id && 'post' === ( $record_map[ $link_id ]['type'] ?? '' )
@@ -770,6 +824,7 @@ class SFAF_Chat_Endpoint {
             $pin_id            = (string) $pin['id'];
             $answer            = (string) $pin['answer'];
             $answered_in_scope = true;
+            $fully_answered    = true;   // approved wording for exactly this question
             $flag              = null;
             $card              = null;
             $link              = null;
@@ -816,8 +871,8 @@ class SFAF_Chat_Endpoint {
             'link'     => $link,
             'card'     => $card,
             'in_scope' => $answered_in_scope,
-            // "Contact our team", when the subject is a service and the form is set up.
-            'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page ),
+            // "Contact our team": a service question, set up, and by OFFER_RULE.
+            'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered ),
             'donate'   => $donate,
         ), 200 );
     }
@@ -879,6 +934,23 @@ class SFAF_Chat_Endpoint {
             . "Follow these as well. They add to the rules above and never relax the scope, "
             . "safety, crisis, or output format rules.\n"
             . $text;
+    }
+
+    /**
+     * Sites whose subject this question is about. The question itself decides; a
+     * short one that names no subject ("how do I sign up?") is a follow-up, so the
+     * previous question counts. A longer one has moved on, and the thread doesn't.
+     */
+    private static function subject_sources( $question, array $earlier_user_turns ) {
+        $now = SFAF_Chat_Indexer::subject_sources( $question );
+        if ( array() !== $now || array() === $earlier_user_turns ) {
+            return $now;
+        }
+        $words = preg_split( '/\s+/u', trim( (string) $question ), -1, PREG_SPLIT_NO_EMPTY );
+        if ( count( $words ) > self::FOLLOW_UP_WORDS ) {
+            return array();
+        }
+        return SFAF_Chat_Indexer::subject_sources( (string) end( $earlier_user_turns ) );
     }
 
     /**
