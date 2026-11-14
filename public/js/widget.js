@@ -126,7 +126,7 @@
     '#sfaf-chat .sfaf-panel:focus{outline:none;}',
 
     // Launcher: docked beside Weglot, same height, square, flush with the same edge.
-    '#sfaf-chat .sfaf-launcher{position:fixed;z-index:2147483000;',
+    '#sfaf-chat .sfaf-launcher{position:fixed;z-index:1000000;',
     '  right:var(--sfaf-dock-right,40px);left:var(--sfaf-dock-left,auto);bottom:var(--sfaf-dock-bottom,0px);',
     '  height:var(--sfaf-dock-height,39px);border-radius:var(--sfaf-radius);',
     '  display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;',
@@ -145,13 +145,13 @@
     '#sfaf-chat.sfaf-open .sfaf-launcher{display:none;}',
 
     // Overlay
-    '#sfaf-chat .sfaf-overlay{position:fixed;inset:0;z-index:2147483001;background:var(--sfaf-overlay);',
+    '#sfaf-chat .sfaf-overlay{position:fixed;inset:0;z-index:1000001;background:var(--sfaf-overlay);',
     '  opacity:0;visibility:hidden;pointer-events:none;transition:opacity .22s ease,visibility 0s linear .22s;}',
     '#sfaf-chat.sfaf-open .sfaf-overlay{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .3s ease,visibility 0s;}',
 
     // Panel: fixed with auto margins centers it without a transform, so text stays crisp
     // once the slide has finished.
-    '#sfaf-chat .sfaf-panel{position:fixed;inset:0;margin:auto;z-index:2147483002;',
+    '#sfaf-chat .sfaf-panel{position:fixed;inset:0;margin:auto;z-index:1000002;',
     '  width:min(var(--sfaf-panel-w),calc(100vw - 48px));height:min(var(--sfaf-panel-h),calc(100vh - 64px));',
     '  display:flex;flex-direction:column;overflow:hidden;background:var(--sfaf-surface);',
     '  border-radius:var(--sfaf-radius);box-shadow:var(--sfaf-shadow);',

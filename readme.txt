@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.15.0
+Stable tag: 1.16.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,18 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.16.0 =
+* The "You are leaving sfaf.org" notice now shows on top. The chat and the appointment
+  chooser moved down to ordinary layers (the chat at 1000000 to 1000002, the chooser at
+  1000010), still above everything else on the page and below the notice. Escape closes
+  the notice first, and the chooser and chat stay open behind it.
+* The four healow links in the appointment chooser open in a new tab (target="_blank",
+  rel="noopener"). Nothing else in the chooser changed. On www.sfaf.org the leaving-site
+  notice handles these links itself, and its Continue button decides how the page opens.
+* Answers from our other sites (Tweaker, Cycle to Zero) are in our own voice: the answer
+  first, as our staff would give it, then "You can read more on our Tweaker.org page."
+  They no longer open with "Tweaker's site explains".
 
 = 1.15.0 =
 * Other sites win on their own subject. A question about Cycle to Zero, or about meth and

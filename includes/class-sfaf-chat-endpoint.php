@@ -55,8 +55,9 @@ class SFAF_Chat_Endpoint {
     /*
      * OTHER SITES (tweaker.org, Cycle to Zero): pages from sites other than SFAF's
      * own (sfaf.org and its subdomains), ranked apart from RELATED PAGES so they never
-     * crowd out an SFAF page, and named by site so the model attributes them instead
-     * of blending them into SFAF's voice. See SFAF_Chat_Indexer::is_own().
+     * crowd out an SFAF page, and named by site so the model can point to them. Since
+     * 1.16.0 the answer is in SFAF's own voice ("You can read more on our Tweaker.org
+     * page."), never narrated as the site's. See SFAF_Chat_Indexer::is_own().
      */
     const OTHER_TOP_N         = 4;
 
@@ -569,9 +570,9 @@ class SFAF_Chat_Endpoint {
             $system_instruction .= "\n\n## SITE FOR THIS SUBJECT\n"
                 . 'This question is about a subject that ' . implode( ' and ', $names ) . ' is dedicated to. '
                 . "Its pages below are usually the best source and the best link for it, better than a page of "
-                . "ours that only mentions the subject. When one of them answers the question, use it and link "
-                . "it, naming the site as the rules for other sites say. Use our own page instead only when it "
-                . "answers something these don't, such as one of our services.\n"
+                . "our main site that only mentions the subject. When one of them answers the question, answer "
+                . "in our own voice and link it, as the rules for our other sites say. Use a main-site page "
+                . "instead only when it answers something these don't, such as one of our services.\n"
                 . json_encode( array_map( function ( array $r ) use ( $for_model ) {
                     return $for_model( $r ) + array( 'site' => SFAF_Chat_Indexer::site_name( (string) ( $r['source'] ?? '' ) ) );
                 }, $subject_pages ), $enc );
@@ -606,11 +607,11 @@ class SFAF_Chat_Endpoint {
         }
 
         if ( array() !== $other_pages ) {
-            $system_instruction .= "\n\n## OTHER SITES (not our main site, lower priority)\n"
-                . "Pages from other sites, each named in \"site\". Use one only when the question is about "
-                . "that site's subject, or our own pages don't cover it. Say whose site it is and link it, for "
-                . "example \"Cycle to Zero's site has registration details.\" Don't speak as that site or call "
-                . "its content ours, and don't take on its voice; describe what its page says plainly.\n"
+            $system_instruction .= "\n\n## OTHER SITES (our sites other than the main one, lower priority)\n"
+                . "Pages from our other sites, each named in \"site\". Use one only when the question is about "
+                . "that site's subject, or our main pages don't cover it. Answer in our own voice, then point to "
+                . "the page and link it, for example \"You can read more on our Tweaker.org page.\" Never open "
+                . "with the source (\"Tweaker's site says...\"), and don't copy the page's tone.\n"
                 . json_encode( array_map( function ( array $r ) use ( $for_model ) {
                     return $for_model( $r ) + array( 'site' => SFAF_Chat_Indexer::site_name( (string) ( $r['source'] ?? '' ) ) );
                 }, $other_pages ), $enc );
