@@ -1,8 +1,9 @@
 <?php
 /**
  * The Contact screen: the "Contact our team" form's switch, its Postmark token,
- * Reply-To, the default recipients and the routes by page. One form; a save with
- * any problem stores nothing (the token included) and says what to fix.
+ * Reply-To, the default recipients and the teams (name, what they handle, their
+ * addresses, optional pages). One form; a save with any problem stores nothing
+ * (the token included) and says what to fix.
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
@@ -37,7 +38,9 @@ class SFAF_Chat_Admin_Contact {
 
         $default_emails = SFAF_Chat_Contact::parse_emails( $post['default_emails'] ?? '', $bad );
         foreach ( $bad as $b ) {
-            $errors[] = 'Default recipients: "' . $b . '" is not an email address.';
+            $errors[] = SFAF_Chat_Contact::FROM === $b
+                ? 'Default recipients: ' . $b . ' is the address the mail is sent from, so it can\'t also receive it. Use the address of the people who should answer.'
+                : 'Default recipients: "' . $b . '" is not an email address.';
         }
         $enabled = ! empty( $post['enabled'] );
         if ( $enabled && array() === $default_emails ) {
@@ -53,31 +56,34 @@ class SFAF_Chat_Admin_Contact {
         $routes = array();
         foreach ( (array) ( $post['routes'] ?? array() ) as $i => $row ) {
             $team     = trim( sanitize_text_field( (string) ( $row['team'] ?? '' ) ) );
+            $about    = trim( sanitize_text_field( (string) ( $row['about'] ?? '' ) ) );
             $patterns = array_values( array_filter( array_map( 'trim', preg_split( '/\r\n|\r|\n/', (string) ( $row['patterns'] ?? '' ) ) ) ) );
             $emails   = SFAF_Chat_Contact::parse_emails( $row['emails'] ?? '', $bad_row );
-            if ( '' === $team && array() === $patterns && array() === $emails && array() === $bad_row ) {
+            if ( '' === $team && '' === $about && array() === $patterns && array() === $emails && array() === $bad_row ) {
                 continue; // an empty row
             }
             $n = count( $routes ) + 1;
-            foreach ( $bad_row as $b ) {
-                $errors[] = 'Route ' . $n . ': "' . $b . '" is not an email address.';
+            if ( '' === $team ) {
+                $errors[] = 'Team ' . $n . ': add the team\'s name.';
             }
-            if ( array() === $patterns ) {
-                $errors[] = 'Route ' . $n . ': add at least one page.';
+            foreach ( $bad_row as $b ) {
+                $errors[] = SFAF_Chat_Contact::FROM === $b
+                    ? 'Team ' . $n . ': ' . $b . ' is the address the mail is sent from, so it can\'t also receive it.'
+                    : 'Team ' . $n . ': "' . $b . '" is not an email address.';
             }
             foreach ( $patterns as $p ) {
                 $problem = SFAF_Chat_Starters::pattern_problem( $p );
                 if ( null !== $problem ) {
-                    $errors[] = 'Route ' . $n . ': "' . $p . '" ' . $problem . '.';
+                    $errors[] = 'Team ' . $n . ': "' . $p . '" ' . $problem . '.';
                 }
             }
             if ( array() === $emails ) {
-                $errors[] = 'Route ' . $n . ': add at least one recipient.';
+                $errors[] = 'Team ' . $n . ': add at least one recipient.';
             }
-            $routes[] = array( 'team' => mb_substr( $team, 0, 60 ), 'patterns' => array_slice( $patterns, 0, 20 ), 'emails' => $emails );
+            $routes[] = array( 'team' => mb_substr( $team, 0, 60 ), 'about' => mb_substr( $about, 0, SFAF_Chat_Contact::MAX_ABOUT ), 'patterns' => array_slice( $patterns, 0, 20 ), 'emails' => $emails );
         }
         if ( count( $routes ) > SFAF_Chat_Contact::MAX_ROUTES ) {
-            $errors[] = 'At most ' . SFAF_Chat_Contact::MAX_ROUTES . ' routes.';
+            $errors[] = 'At most ' . SFAF_Chat_Contact::MAX_ROUTES . ' teams.';
         }
 
         $token = trim( (string) ( $post['postmark_token'] ?? '' ) );
@@ -113,10 +119,9 @@ class SFAF_Chat_Admin_Contact {
         $this->admin->gate();
         check_admin_referer( self::TEST_ACTION );
         $c    = SFAF_Chat_Contact::config();
-        $user = wp_get_current_user();
-        $sent = SFAF_Chat_Contact::send( 'SFAF Chat test', (string) $user->user_email, (string) $c['default_team'], (array) $c['default_emails'], '', array(), true );
+        $sent = SFAF_Chat_Contact::send_test();
         true === $sent
-            ? $this->admin->stash_notice( array( 'Test email sent to ' . implode( ', ', (array) $c['default_emails'] ) . '.' ), 'success' )
+            ? $this->admin->stash_notice( array( 'Test email sent to ' . implode( ', ', SFAF_Chat_Contact::recipients( (array) $c['default_emails'] ) ) . '. Check that inbox, and Postmark\'s Activity for where it was delivered.' ), 'success' )
             : $this->admin->stash_notice( array( 'The test email was not sent: ' . $sent ), 'error' );
         $this->back();
     }
@@ -125,9 +130,10 @@ class SFAF_Chat_Admin_Contact {
         $base = 'routes[' . (int) $i . ']';
         ?>
         <tr>
-            <td><input type="text" name="<?php echo esc_attr( $base ); ?>[team]" class="regular-text" placeholder="Programa Latino team" value="<?php echo esc_attr( (string) ( $r['team'] ?? '' ) ); ?>" aria-label="Team name"></td>
-            <td><textarea name="<?php echo esc_attr( $base ); ?>[patterns]" rows="2" class="large-text code" spellcheck="false" placeholder="/support-services/latine-health/*" aria-label="Pages, one per line"><?php echo esc_textarea( implode( "\n", (array) ( $r['patterns'] ?? array() ) ) ); ?></textarea></td>
+            <td><input type="text" name="<?php echo esc_attr( $base ); ?>[team]" class="regular-text" placeholder="Stonewall Project" value="<?php echo esc_attr( (string) ( $r['team'] ?? '' ) ); ?>" aria-label="Team name"></td>
+            <td><textarea name="<?php echo esc_attr( $base ); ?>[about]" rows="2" class="large-text" placeholder="Substance use counseling for queer men and trans people" aria-label="What they handle"><?php echo esc_textarea( (string) ( $r['about'] ?? '' ) ); ?></textarea></td>
             <td><textarea name="<?php echo esc_attr( $base ); ?>[emails]" rows="2" class="large-text" spellcheck="false" aria-label="Recipients"><?php echo esc_textarea( implode( "\n", (array) ( $r['emails'] ?? array() ) ) ); ?></textarea></td>
+            <td><textarea name="<?php echo esc_attr( $base ); ?>[patterns]" rows="2" class="large-text code" spellcheck="false" placeholder="/support-services/the-stonewall-project/*" aria-label="Pages, one per line (optional)"><?php echo esc_textarea( implode( "\n", (array) ( $r['patterns'] ?? array() ) ) ); ?></textarea></td>
         </tr>
         <?php
     }
@@ -142,7 +148,7 @@ class SFAF_Chat_Admin_Contact {
             <?php $this->admin->tabs( self::PAGE ); ?>
             <?php $this->admin->show_notice(); ?>
 
-            <p>When a question is about a service, a program or getting help, the chat offers a <strong>Contact our team</strong> button. The visitor gives a name and an email, is told their chat transcript will be attached and that someone will reach out within 1 to 2 business days, and the request is emailed to the team for the page they were on. No copy of a request is kept here.</p>
+            <p>When someone wants to reach a person, the chat offers a <strong>Contact our team</strong> button, beside any phone number it gives. The visitor gives a name, an email and, if they like, a phone number and a note, and is told someone will reach out within 1 to 2 business days. The request, with the chat, is emailed to the team that handles the subject of their question, and the visitor gets a short confirmation email. No copy of a request is kept here.</p>
             <p>Status: <strong><?php echo SFAF_Chat_Contact::ready() ? 'Offered in the chat' : 'Not offered yet'; ?></strong><?php echo SFAF_Chat_Contact::ready() ? '' : ' (it needs to be switched on, a Postmark token and a default recipient).'; ?></p>
 
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" autocomplete="off">
@@ -174,14 +180,14 @@ class SFAF_Chat_Admin_Contact {
                     <tr>
                         <th scope="row"><label for="sfaf-chat-default-emails">Default recipients</label></th>
                         <td><textarea id="sfaf-chat-default-emails" name="default_emails" rows="2" class="large-text" spellcheck="false"><?php echo esc_textarea( implode( "\n", (array) $c['default_emails'] ) ); ?></textarea>
-                            <p class="description">For any page no route below covers. One or more addresses, one per line or separated by commas.</p></td>
+                            <p class="description">For any request no team below fits. One or more addresses, one per line or separated by commas. Not <code><?php echo esc_html( SFAF_Chat_Contact::FROM ); ?></code>, which sends the mail.</p></td>
                     </tr>
                 </table>
 
-                <h2>Routes by page</h2>
-                <p>First match wins. Pages are written as on the Suggested Questions screen: a path (<code>/strut</code>), everything under one (<code>/support-services/latine-health/*</code>), or a full address for another site. The <code>/es/</code> prefix is ignored. Clear all three boxes of a row to remove it.</p>
+                <h2>Teams</h2>
+                <p>The chat picks the team from what the question is about, not the page it was asked on: someone on the home page asking about the Stonewall Project goes to that team. It reads each team's name and <strong>What they handle</strong>, so say plainly what they cover. <strong>Pages</strong> are optional, a fallback when the chat names no team; write them as on the Suggested Questions screen (<code>/strut</code>, <code>/support-services/latine-health/*</code>). Anything else goes to the default recipients. The button reads "Contact our" and the team's name, with "team" added if it isn't there. Clear every box of a row to remove it.</p>
                 <table class="widefat sfaf-chat-routes">
-                    <thead><tr><th scope="col">Team name (on the button)</th><th scope="col">Pages, one per line</th><th scope="col">Recipients</th></tr></thead>
+                    <thead><tr><th scope="col">Team name</th><th scope="col">What they handle</th><th scope="col">Recipients</th><th scope="col">Pages (optional)</th></tr></thead>
                     <tbody>
                         <?php
                         $i = 0;

@@ -668,6 +668,7 @@ class SFAF_Chat_Endpoint {
 
         // Closures from the calendar and staff alerts, when there is something current
         // or the visitor asks whether we're open. Empty otherwise, so it adds nothing.
+        $system_instruction .= self::contact_section();
         $system_instruction .= SFAF_Chat_Closures::status_section( $question, SFAF_Chat_Alerts::active() );
 
         /* --------------------------- CALL GEMINI -------------------------- */
@@ -691,6 +692,8 @@ class SFAF_Chat_Endpoint {
                         // For the "Contact our team" button: see SFAF_Chat_Contact::OFFER_RULE.
                         'wants_person'   => array( 'type' => 'boolean' ),
                         'fully_answered' => array( 'type' => 'boolean' ),
+                        // A team from CONTACT FORM, or null (1.17.0).
+                        'contact_team'   => array( 'type' => 'string', 'nullable' => true ),
                     ),
                     'required'   => array( 'answer', 'in_scope', 'topic' ),
                 ),
@@ -804,6 +807,8 @@ class SFAF_Chat_Endpoint {
         // as "no reason to offer it", so a reply that skips them never adds a button.
         $wants_person   = true === ( $parsed['wants_person'] ?? null );
         $fully_answered = false !== ( $parsed['fully_answered'] ?? true );
+        // Only a name from the configured list counts; SFAF_Chat_Contact::resolve() checks.
+        $contact_team = is_string( $parsed['contact_team'] ?? null ) ? mb_substr( $parsed['contact_team'], 0, 100 ) : '';
 
         // A declined or crisis reply never points to a blog post: a post is a story or a
         // perspective, not a next step, and it may be out of date. The answer still goes.
@@ -872,8 +877,8 @@ class SFAF_Chat_Endpoint {
             'link'     => $link,
             'card'     => $card,
             'in_scope' => $answered_in_scope,
-            // "Contact our team": a service question, set up, and by OFFER_RULE.
-            'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered ),
+            // "Contact our team": set up, and by OFFER_RULE; routed to the model's team.
+            'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered, $contact_team ),
             'donate'   => $donate,
         ), 200 );
     }
@@ -926,6 +931,43 @@ class SFAF_Chat_Endpoint {
     }
 
     /** Staff instructions, added after the base rules. Empty adds nothing at all. */
+    /**
+     * CONTACT FORM (1.17.0): only while the form can really be offered, so the model
+     * never promises a button that won't appear. Says what the form does, so the
+     * model offers it instead of saying it can't pass a message on, and lists the
+     * teams it may route to. Absent otherwise, which keeps the request unchanged.
+     */
+    private static function contact_section() {
+        if ( ! SFAF_Chat_Contact::ready() ) {
+            return '';
+        }
+        $teams = SFAF_Chat_Contact::teams_for_model();
+        $out   = "\n\n## CONTACT FORM\n"
+            . "We can take a message for a team right here in the chat. When the system shows the contact "
+            . "button under your reply, the visitor leaves a name, an email and, if they like, a phone number "
+            . "and a note, and it is emailed to the right team with this chat. So never say you can't pass a "
+            . "message on, can't connect them with our staff, or that there is no way to reach someone from "
+            . "the chat.\n"
+            . "- When they want to reach a person (\"who can I contact?\", \"can I talk to someone?\", \"how "
+            . "do I get in touch with the Stonewall team?\", \"can I contact them here?\"), set \"wants_person\" "
+            . "to true and say they can send a message to the team here in the chat, using the button below. "
+            . "If the knowledge gives a phone number for that team or service, give it too, as the quickest "
+            . "way to reach them; they can choose.\n"
+            . "- Don't offer it on an ordinary question you fully answered, and don't set \"wants_person\" "
+            . "just because your answer mentions a phone number.\n";
+        if ( array() !== $teams ) {
+            $out .= "- Set \"contact_team\" to the team below that handles what they want to reach us about, by "
+                . "the subject of the question, not the page they are on. Write its name exactly as given. Use "
+                . "null when none clearly fits; it then goes to our general team.\n"
+                . wp_json_encode( array_map( function ( $t ) {
+                    return array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), $t );
+                }, $teams ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+        } else {
+            $out .= "- Set \"contact_team\" to null.\n";
+        }
+        return $out;
+    }
+
     private static function special_instructions_block() {
         $text = trim( (string) SFAF_Chat_Settings::get( 'special_instructions' ) );
         if ( '' === $text ) {

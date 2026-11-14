@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.16.0
+Stable tag: 1.17.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,24 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.17.0 =
+* The contact form is offered when someone wants to reach a person ("who can I contact",
+  "can I talk to someone", "how do I get in touch with the Stonewall team"), even when the
+  answer also gives a phone number, which the chat offers beside it as the quickest way.
+  Ordinary questions that were fully answered still don't get it.
+* The chat knows it can take a message for a team, and never says it can't pass one on
+  or connect someone with our staff.
+* Requests go to the team the question is about, not the page it was asked on. The
+  Contact screen's routes are now Teams: a name, what they handle, recipients, and pages
+  as an optional fallback. Anything else goes to the default recipients.
+* The sending address, websites@sfaf.org, can never be a recipient: refused when saving,
+  dropped when sending. The test email says where it went.
+* The team email is a styled HTML email (logo, Arial, our colors) with everything in the
+  body: name, email, phone, additional details, team, the page as a plain address, and the
+  whole chat. No attachment, and link tracking is off.
+* The form has two optional fields: Phone and Additional details.
+* The visitor gets a short confirmation email, with nothing they typed in it.
 
 = 1.16.0 =
 * The "You are leaving sfaf.org" notice now shows on top. The chat and the appointment

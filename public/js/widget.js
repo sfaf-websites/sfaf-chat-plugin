@@ -243,9 +243,11 @@
     '#sfaf-chat .sfaf-contact-title{font-weight:700;}',
     '#sfaf-chat .sfaf-contact-note{margin:0;color:var(--sfaf-muted);font-size:13.5px;line-height:1.45;}',
     '#sfaf-chat .sfaf-contact label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;}',
-    '#sfaf-chat .sfaf-contact input{font:inherit;font-weight:400;font-size:15px;color:var(--sfaf-text);background:var(--sfaf-surface);',
+    '#sfaf-chat .sfaf-contact input,#sfaf-chat .sfaf-contact textarea{font:inherit;font-weight:400;font-size:15px;color:var(--sfaf-text);background:var(--sfaf-surface);',
     '  border:1px solid var(--sfaf-border);border-radius:var(--sfaf-radius);padding:8px 10px;width:100%;box-sizing:border-box;}',
-    '#sfaf-chat .sfaf-contact input:focus-visible{outline:2px solid var(--sfaf-focus);outline-offset:1px;}',
+    '#sfaf-chat .sfaf-contact input:focus-visible,#sfaf-chat .sfaf-contact textarea:focus-visible{outline:2px solid var(--sfaf-focus);outline-offset:1px;}',
+    '#sfaf-chat .sfaf-contact textarea{resize:vertical;min-height:72px;line-height:1.45;}',
+    '#sfaf-chat .sfaf-contact .sfaf-optional{font-weight:400;color:var(--sfaf-muted);}',
     '#sfaf-chat .sfaf-contact-hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}',
     '#sfaf-chat .sfaf-contact-actions{display:flex;gap:8px;flex-wrap:wrap;}',
     '#sfaf-chat .sfaf-contact-send{background:var(--sfaf-dark);color:var(--sfaf-on-dark);border:0;border-radius:var(--sfaf-radius);',
@@ -928,7 +930,9 @@
         if (data.card) addCard(data.card);
         else if (data.link) addLink(data.link);
         if (data.donate) addDonate(data.donate);
-        if (data.contact && typeof data.contact.label === 'string') addContact(data.contact.label);
+        if (data.contact && typeof data.contact.label === 'string') {
+          addContact(data.contact.label, typeof data.contact.team === 'string' ? data.contact.team : '');
+        }
 
         // Only completed exchanges enter the thread.
         thread.push({ role: 'user', text: question });
@@ -952,50 +956,61 @@
 
   /* ============================ CONTACT FORM ============================== */
   /*
-   * "Contact our team" opens a short form here in the conversation: a name and an
-   * email. The transcript the visitor can see goes with it. Nothing is kept in the
-   * browser beyond this panel, and closing the chat clears it like the rest.
+   * "Contact our team" opens a short form here in the conversation: a name, an
+   * email, and optionally a phone number and a few words. The transcript the
+   * visitor can see goes with it, to the team the server chose ("team", sent back
+   * as given; the server only accepts a team it has). Nothing is kept in the browser
+   * beyond this panel, and closing the chat clears it like the rest.
    */
   var contactEl = null;
   var contactSeq = 0;
 
-  function addContact(label) {
+  function addContact(label, team) {
     if (contactEl) { contactEl.remove(); contactEl = null; }
     var b = el('button', 'sfaf-contactbtn', label);
     b.type = 'button';
-    b.addEventListener('click', function () { showContactForm(label, b); });
+    b.addEventListener('click', function () { showContactForm(label, b, team || ''); });
     contactEl = b;
     messages.appendChild(b);
     scrollDown();
   }
 
-  function field(labelText, type, name, auto, max) {
+  // A labelled input, or a textarea for 'textarea'. Optional ones say so in the label.
+  function field(labelText, type, name, auto, max, optional) {
     var id = 'sfaf-contact-' + name + '-' + (++contactSeq);
     var l = el('label');
     l.setAttribute('for', id);
-    l.appendChild(document.createTextNode(labelText));
-    var i = el('input');
+    // Text and "(optional)" in one span, so the column layout keeps them on one line.
+    var t = el('span', null, labelText);
+    if (optional) t.appendChild(el('span', 'sfaf-optional', ' (optional)'));
+    l.appendChild(t);
+    var i = el(type === 'textarea' ? 'textarea' : 'input');
     i.id = id;
-    i.type = type;
+    if (type === 'textarea') i.rows = 3;
+    else i.type = type;
     i.name = name;
     i.autocomplete = auto;
     i.maxLength = max;
-    i.required = true;
+    i.required = !optional;
     l.appendChild(i);
     return { label: l, input: i };
   }
 
-  function showContactForm(label, btn) {
+  function showContactForm(label, btn, team) {
     var form = el('form', 'sfaf-contact');
     form.noValidate = true;
     form.setAttribute('aria-label', label);
     form.appendChild(el('div', 'sfaf-contact-title', label));
     form.appendChild(el('p', 'sfaf-contact-note',
-      "We'll attach this chat transcript, and someone will reach out within 1 to 2 business days."));
+      "We'll send this chat with your message, and someone will reach out within 1 to 2 business days."));
     var name = field('Your name', 'text', 'name', 'name', 100);
     var email = field('Your email', 'email', 'email', 'email', 200);
+    var phone = field('Phone', 'tel', 'phone', 'tel', 30, true);
+    var details = field('Additional details', 'textarea', 'details', 'off', 1000, true);
     form.appendChild(name.label);
     form.appendChild(email.label);
+    form.appendChild(phone.label);
+    form.appendChild(details.label);
 
     // People never see this field; a bot that fills it in is quietly ignored.
     var hp = el('div', 'sfaf-contact-hp');
@@ -1033,11 +1048,16 @@
       var m = email.input.value.trim();
       if (!n) { status.textContent = 'Please add your name.'; name.input.focus(); return; }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(m)) { status.textContent = 'Please check your email address.'; email.input.focus(); return; }
+      var ph = phone.input.value.trim();
+      if (ph && (ph.replace(/\D/g, '').length < 7 || !/^\+?[0-9().\-\s]+(?:\s*(?:ext\.?|x)\s*\d{1,6})?$/i.test(ph))) {
+        status.textContent = 'Please check your phone number, or leave it blank.'; phone.input.focus(); return;
+      }
       status.textContent = '';
       send.disabled = true;
       send.textContent = 'Sending…';
       fetch(CONTACT_URL, requestOptions({
-        name: n, email: m, page: pageAddress(), thread: thread.slice(), website: hpInput.value
+        name: n, email: m, phone: ph, details: details.input.value.trim(), team: team,
+        page: pageAddress(), thread: thread.slice(), website: hpInput.value
       }))
         .then(function (res) { return res.json(); })
         .then(function (data) {
