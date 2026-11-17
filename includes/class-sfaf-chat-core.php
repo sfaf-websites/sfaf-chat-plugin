@@ -220,6 +220,7 @@ class SFAF_Chat_Core {
         array( 'hiv', 'vih' ),
         array( 'test', 'testing', 'prueba', 'screening' ),
         array( 'black', 'african' ),
+        array( 'ceo', 'executive', 'leadership', 'leader', 'lead' ),
     );
 
     const SYNONYM_WEIGHT = 0.6;

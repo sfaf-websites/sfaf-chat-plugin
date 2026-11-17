@@ -29,7 +29,7 @@
  *   - the lock is uploads/sfaf-chat/indexer.lock
  *
  * Records use the same schema as data/knowledge-base.json:
- *   id, title, url, source, type, keywords, og{title,description,image}, text, lastmod, indexed, cap
+ *   id, title, url, source, type, keywords, og{title,description,image}, text, lastmod, indexed, cap, parser
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
@@ -48,6 +48,7 @@ class SFAF_Chat_Indexer {
     const USER_AGENT       = 'SFAF-Chat-Indexer/1.0 (+https://resources.sfaf.org/chat/)';
     const THIN_PAGE_WORDS  = 60;          // below this, a page's JSON-LD supplies its text
     const PLAN_VERSION     = 2;           // bump when planning changes, so the next call plans afresh
+    const PARSER_VERSION   = 2;           // bump when parse_page() keeps different text, so every page is read again once
 
     /**
      * Sites to index. Each record is tagged with 'source' so the endpoint can
@@ -446,6 +447,8 @@ class SFAF_Chat_Indexer {
                     || ($prev['type'] ?? null) !== $type
                     // stored under a different word cap (the cap changed): fetch again once
                     || ($prev['cap'] ?? null) !== self::word_cap($type)
+                    // read by an older parse_page() (none stored means 1): fetch again once
+                    || (int)($prev['parser'] ?? 1) !== self::PARSER_VERSION
                     // no lastmod in the sitemap: refresh weekly
                     || ($lastmod === null && (time() - strtotime((string)($prev['indexed'] ?? '1970-01-01'))) > 7 * 86400);
 
@@ -675,6 +678,7 @@ class SFAF_Chat_Indexer {
             'lastmod'  => $item['lastmod'],
             'indexed'  => gmdate('c'),
             'cap'      => $maxWords,
+            'parser'   => self::PARSER_VERSION,
         ] + (!empty($item['extra']) ? ['extra' => true] : []);
     }
 
@@ -912,7 +916,13 @@ class SFAF_Chat_Indexer {
     {
         $kill = [];
 
-        foreach ($xp->query('//script|//style|//noscript|//template|//svg|//iframe|//form|//nav|//header|//footer|//aside|//button|//select') as $n) {
+        foreach ($xp->query('//script|//style|//noscript|//template|//svg|//iframe|//form|//nav|//aside|//button|//select') as $n) {
+            $kill[] = $n;
+        }
+        // A header or footer inside an <article> belongs to that article, and on a card
+        // it holds content: sfaf.org's Our Leadership cards keep each person's role
+        // ("Chief Executive Officer") in one. Only the page's own are chrome.
+        foreach ($xp->query('//header[not(ancestor::article)]|//footer[not(ancestor::article)]') as $n) {
             $kill[] = $n;
         }
         foreach ($xp->query("//*[@role='navigation' or @role='banner' or @role='contentinfo' or @role='search' or @role='complementary' or @aria-hidden='true']") as $n) {
@@ -922,12 +932,16 @@ class SFAF_Chat_Indexer {
         // Common theme class/id names for chrome. Word-boundary matches only, and
         // never anything that is or contains the main content.
         $chrome = '/(^|[\s_-])(nav|navbar|navigation|menu|footer|breadcrumbs?|cookie|cookies|skip-link|sidebar|share|social|modal|popup|newsletter-signup)([\s_-]|$)|(site|global|masthead|main)[-_]?header/i';
+        // "person-card__footer" matches the footer word above. Inside an <article> that
+        // is the article's own footer, so it stays, as the element does.
+        $card = '/^(?!.*(nav|navbar|navigation|menu|breadcrumbs?|cookie|cookies|skip-link|sidebar|share|social|modal|popup|newsletter-signup)).*footer/i';
         foreach ($xp->query('//*[@class or @id]') as $n) {
             if (in_array($n->nodeName, ['html', 'body', 'main', 'article'], true)) {
                 continue;
             }
             $attr = $n->getAttribute('class') . ' ' . $n->getAttribute('id');
-            if (preg_match($chrome, $attr) && $xp->query('.//main|.//article', $n)->length === 0) {
+            if (preg_match($chrome, $attr) && $xp->query('.//main|.//article', $n)->length === 0
+                && !(preg_match($card, $attr) && $xp->query('ancestor::article', $n)->length > 0)) {
                 $kill[] = $n;
             }
         }

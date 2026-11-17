@@ -131,7 +131,7 @@
     '  height:var(--sfaf-dock-height,39px);border-radius:var(--sfaf-radius);',
     '  display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;',
     '  background:var(--sfaf-dark);color:var(--sfaf-on-dark);border:0;',
-    '  border-left:4px solid var(--sfaf-accent);padding:0 14px 0 11px;font-size:13px;font-weight:600;',
+    '  border-left:4px solid var(--sfaf-accent);padding:0 14px 0 47px;font-size:13px;font-weight:600;',
     // Its edge must show on ANY page: a black footer as much as white content. A thin
     // accent ring inside the edge carries it on dark backgrounds, a faint light hairline
     // just outside keeps it even if the accent is set dark, and a soft shadow lifts it
@@ -141,7 +141,15 @@
     '#sfaf-chat .sfaf-launcher:hover{background:var(--sfaf-dark-hover);}',
     // Inset, because the page behind may be white and the bottom edge would clip it.
     '#sfaf-chat .sfaf-launcher:focus-visible{outline:2px solid var(--sfaf-focus-on-dark);outline-offset:-4px;}',
-    '#sfaf-chat .sfaf-launcher svg{width:16px;height:16px;flex:none;}',
+    // The question bubble straddles the top edge: its body half inside, half above.
+    // A child of the launcher, so it shares the launcher's layer (above Weglot's 9999)
+    // and its click. The dark outline and shadow keep it visible on a white page.
+    '#sfaf-chat .sfaf-launcher .sfaf-qmark{position:absolute;left:7px;top:-12px;width:32px;height:32px;',
+    '  filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));transition:transform .2s var(--sfaf-ease);}',
+    '#sfaf-chat .sfaf-launcher:hover .sfaf-qmark,#sfaf-chat .sfaf-launcher:focus-visible .sfaf-qmark{transform:translateY(-2px);}',
+    '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{fill:var(--sfaf-accent);stroke:var(--sfaf-dark);stroke-width:2;}',
+    '#sfaf-chat .sfaf-qmark .sfaf-qmark-q{fill:none;stroke:var(--sfaf-dark);stroke-width:2.6;}',
+    '#sfaf-chat .sfaf-qmark .sfaf-qmark-d{fill:var(--sfaf-dark);stroke:none;}',
     '#sfaf-chat.sfaf-open .sfaf-launcher{display:none;}',
 
     // Overlay
@@ -201,21 +209,53 @@
     '#sfaf-chat .sfaf-msg a.sfaf-tel{color:inherit;text-decoration:underline;',
     '  text-underline-offset:2px;font-weight:600;}',
     '#sfaf-chat a.sfaf-tel{white-space:nowrap;}',
-    '#sfaf-chat .sfaf-msg a.sfaf-appt-link{display:inline-block;margin:6px 0 2px;padding:7px 14px;',
-    '  background:var(--sfaf-accent);color:var(--sfaf-on-accent);border-radius:var(--sfaf-radius);',
-    '  font-weight:600;text-decoration:none;white-space:nowrap;}',
-    '#sfaf-chat .sfaf-msg a.sfaf-appt-link:hover{background:var(--sfaf-accent-hover);}',
+    '#sfaf-chat .sfaf-msg a.sfaf-appt-link{margin:6px 0 2px;white-space:nowrap;}',
+
+    /*
+     * Every action button in the conversation (link, Donate, booking, card, contact,
+     * Send): a fill grows from the middle on hover or keyboard focus, the colors trade
+     * (yellow and dark), and the arrow leaves on the right as another comes in on the
+     * left. markFlow() adds the fill, the text and the two arrows. Pixels, not rem:
+     * the host page sets the root font size.
+     */
+    '#sfaf-chat .sfaf-flow{--sfaf-flow-bg:var(--sfaf-accent);--sfaf-flow-ink:var(--sfaf-on-accent);',
+    '  --sfaf-flow-fill:var(--sfaf-dark);--sfaf-flow-ink-on:var(--sfaf-accent);',
+    '  position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;',
+    '  min-height:48px;padding:16px 56px 16px 24px;border:0;border-radius:var(--sfaf-radius);cursor:pointer;',
+    '  background:var(--sfaf-flow-bg);color:var(--sfaf-flow-ink);box-shadow:none;text-decoration:none;text-align:left;',
+    '  font-family:var(--sfaf-font);font-weight:700;font-size:16px;line-height:16px;letter-spacing:.8px;',
+    '  text-transform:uppercase;transition:color .45s ease;}',
+    '#sfaf-chat .sfaf-flow-dark{--sfaf-flow-bg:var(--sfaf-dark);--sfaf-flow-ink:var(--sfaf-on-dark);',
+    '  --sfaf-flow-fill:var(--sfaf-accent);--sfaf-flow-ink-on:var(--sfaf-on-accent);}',
+    '#sfaf-chat .sfaf-flow-disc{position:absolute;left:50%;top:50%;z-index:-1;width:24px;height:24px;',
+    '  margin:-12px 0 0 -12px;border-radius:50%;background:var(--sfaf-flow-fill);transform:scale(0);',
+    '  transition:transform .6s cubic-bezier(.23,1,.32,1);pointer-events:none;}',
+    // inherit: the reset above sets letter-spacing and text-transform on every element.
+    '#sfaf-chat .sfaf-flow-text{position:relative;letter-spacing:inherit;text-transform:inherit;',
+    '  transition:transform .6s cubic-bezier(.23,1,.32,1);}',
+    '#sfaf-chat .sfaf-flow .sfaf-flow-a{position:absolute;top:50%;width:16px;height:16px;margin-top:-8px;',
+    '  transition:left .6s cubic-bezier(.23,1,.32,1),right .6s cubic-bezier(.23,1,.32,1);}',
+    '#sfaf-chat .sfaf-flow .sfaf-flow-in{left:-25%;}',
+    '#sfaf-chat .sfaf-flow .sfaf-flow-out{right:24px;}',
+    '#sfaf-chat .sfaf-flow:not([disabled]):hover,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible{color:var(--sfaf-flow-ink-on);}',
+    '#sfaf-chat .sfaf-flow:not([disabled]):hover .sfaf-flow-disc,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible .sfaf-flow-disc{transform:scale(32);}',
+    '#sfaf-chat .sfaf-flow:not([disabled]):hover .sfaf-flow-text,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible .sfaf-flow-text{transform:translateX(32px);}',
+    '#sfaf-chat .sfaf-flow:not([disabled]):hover .sfaf-flow-in,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible .sfaf-flow-in{left:24px;}',
+    '#sfaf-chat .sfaf-flow:not([disabled]):hover .sfaf-flow-out,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible .sfaf-flow-out{right:-30%;}',
 
     // A note from the widget itself, such as a voice message. Not part of the conversation.
     '#sfaf-chat .sfaf-note{align-self:stretch;font-size:13.5px;color:var(--sfaf-muted);padding:2px 0 2px 12px;',
     '  border-left:2px solid var(--sfaf-border);animation:sfaf-rise .34s var(--sfaf-ease) both;}',
 
     // Staff alerts, at the top of the conversation while they are active.
-    '#sfaf-chat .sfaf-alert{align-self:stretch;background:var(--sfaf-surface-warm);color:var(--sfaf-text);',
-    '  border-left:4px solid var(--sfaf-accent);border-radius:var(--sfaf-radius);padding:10px 14px;font-size:14px;',
+    // A filled yellow block, so a closure reads first when the chat opens.
+    '#sfaf-chat .sfaf-alert{align-self:stretch;background:var(--sfaf-accent);color:var(--sfaf-on-accent);',
+    '  border-radius:var(--sfaf-radius);padding:14px 16px 15px;font-size:15px;font-weight:500;',
     '  line-height:1.45;animation:sfaf-rise .34s var(--sfaf-ease) both;}',
-    '#sfaf-chat .sfaf-alert-kind{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;',
-    '  color:var(--sfaf-muted);margin-bottom:2px;}',
+    '#sfaf-chat .sfaf-alert-kind{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;',
+    '  letter-spacing:.08em;text-transform:uppercase;color:var(--sfaf-on-accent);margin-bottom:6px;}',
+    '#sfaf-chat .sfaf-alert-kind svg{width:18px;height:18px;flex:none;stroke-width:2.4;}',
+    '#sfaf-chat .sfaf-alert-kind span{letter-spacing:inherit;text-transform:inherit;}',
     '#sfaf-chat .sfaf-alert p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;}',
     '#sfaf-chat .sfaf-alert p+p{margin-top:6px;}',
 
@@ -232,11 +272,8 @@
     '#sfaf-chat .sfaf-starter svg{width:15px;height:15px;flex:none;}',
 
     // "Contact our team": an outline button, then a short form in the conversation.
-    '#sfaf-chat .sfaf-contactbtn{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;max-width:84%;',
-    '  background:transparent;color:var(--sfaf-text);border:1px solid var(--sfaf-dark);border-radius:var(--sfaf-radius);',
-    '  padding:8px 14px;font-weight:600;font-size:14px;line-height:1.35;cursor:pointer;',
-    '  animation:sfaf-rise .34s var(--sfaf-ease) .1s both;transition:background .16s ease;}',
-    '#sfaf-chat .sfaf-contactbtn:hover{background:var(--sfaf-surface);}',
+    '#sfaf-chat .sfaf-contactbtn{align-self:flex-start;max-width:84%;',
+    '  animation:sfaf-rise .34s var(--sfaf-ease) .1s both;}',
     '#sfaf-chat .sfaf-contact{align-self:stretch;display:flex;flex-direction:column;gap:10px;position:relative;',
     '  background:var(--sfaf-surface);color:var(--sfaf-text);border:1px solid var(--sfaf-border);',
     '  border-radius:var(--sfaf-radius);padding:12px 14px;font-size:14px;animation:sfaf-rise .34s var(--sfaf-ease) both;}',
@@ -250,8 +287,6 @@
     '#sfaf-chat .sfaf-contact .sfaf-optional{font-weight:400;color:var(--sfaf-muted);}',
     '#sfaf-chat .sfaf-contact-hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden;}',
     '#sfaf-chat .sfaf-contact-actions{display:flex;gap:8px;flex-wrap:wrap;}',
-    '#sfaf-chat .sfaf-contact-send{background:var(--sfaf-dark);color:var(--sfaf-on-dark);border:0;border-radius:var(--sfaf-radius);',
-    '  padding:9px 16px;font-weight:600;font-size:14px;cursor:pointer;}',
     '#sfaf-chat .sfaf-contact-send[disabled]{opacity:.6;cursor:default;}',
     '#sfaf-chat .sfaf-contact-cancel{background:transparent;color:var(--sfaf-text);border:1px solid var(--sfaf-border);',
     '  border-radius:var(--sfaf-radius);padding:9px 14px;font-size:14px;cursor:pointer;}',
@@ -259,21 +294,13 @@
     '#sfaf-chat .sfaf-contact-status:empty{display:none;}',
 
     // Donate: a full-width accent button, only on a donation answer. A link, never a payment.
-    '#sfaf-chat .sfaf-donatebtn{align-self:stretch;display:flex;align-items:center;justify-content:center;gap:8px;',
-    '  background:var(--sfaf-accent);color:var(--sfaf-on-accent);border-radius:var(--sfaf-radius);',
-    '  padding:12px 16px;font-weight:700;font-size:16px;line-height:1.2;text-decoration:none;',
-    '  animation:sfaf-rise .34s var(--sfaf-ease) .06s both;transition:background .16s ease;}',
-    '#sfaf-chat .sfaf-donatebtn:hover{background:var(--sfaf-accent-hover);}',
+    '#sfaf-chat .sfaf-donatebtn{align-self:stretch;display:flex;justify-content:center;',
+    '  animation:sfaf-rise .34s var(--sfaf-ease) .06s both;}',
     '#sfaf-chat .sfaf-donatebtn:focus-visible{outline:2px solid var(--sfaf-focus);outline-offset:2px;}',
-    '#sfaf-chat .sfaf-donatebtn svg{width:16px;height:16px;flex:none;}',
 
-    // Link button: the one yellow element in the conversation.
-    '#sfaf-chat .sfaf-linkbtn{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;',
-    '  max-width:84%;background:var(--sfaf-accent);color:var(--sfaf-on-accent);border:0;border-radius:var(--sfaf-radius);',
-    '  padding:9px 14px;font-weight:600;font-size:14px;line-height:1.35;',
-    '  animation:sfaf-rise .34s var(--sfaf-ease) .06s both;transition:background .16s ease;}',
-    '#sfaf-chat .sfaf-linkbtn:hover{background:var(--sfaf-accent-hover);}',
-    '#sfaf-chat .sfaf-linkbtn svg{width:15px;height:15px;flex:none;}',
+    // Link button
+    '#sfaf-chat .sfaf-linkbtn{align-self:flex-start;max-width:84%;',
+    '  animation:sfaf-rise .34s var(--sfaf-ease) .06s both;}',
 
     // Card
     '#sfaf-chat .sfaf-card{align-self:flex-start;width:84%;background:var(--sfaf-surface);',
@@ -285,9 +312,7 @@
     '#sfaf-chat .sfaf-card-kind{font-size:13px;font-weight:600;color:var(--sfaf-muted);margin-bottom:2px;}',
     '#sfaf-chat .sfaf-card-title{font-weight:600;font-size:16px;color:var(--sfaf-text);}',
     '#sfaf-chat .sfaf-card-sub{color:var(--sfaf-muted);font-size:13.5px;margin-top:4px;}',
-    '#sfaf-chat .sfaf-card-cta{display:inline-block;margin-top:12px;background:var(--sfaf-dark);border-radius:var(--sfaf-radius);',
-    '  color:var(--sfaf-on-dark);padding:8px 14px;font-weight:600;font-size:14px;transition:background .16s ease;}',
-    '#sfaf-chat .sfaf-card-cta:hover{background:var(--sfaf-dark-hover);}',
+    '#sfaf-chat .sfaf-card-cta{margin-top:12px;}',
 
     // Typing indicator: three square marks passing a slow beat along the row.
     '#sfaf-chat .sfaf-typing{display:inline-flex;gap:5px;align-items:center;height:47px;padding:0 16px;}',
@@ -391,12 +416,49 @@
   }
 
   // Square-cornered line icons, to match the squared interface.
-  var ICON_CHAT = ['M4 5h16v11H10l-6 4z'];
   var ICON_CLOSE = ['M18 6 6 18', 'M6 6l12 12'];
   var ICON_SEND = ['M4 12h15', 'M13 6l6 6-6 6'];
-  var ICON_ARROW = ['M7 17 17 7', 'M8 7h9v9'];
   var ICON_MIC = ['M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z', 'M19 11a7 7 0 0 1-14 0', 'M12 18v3'];
   var ICON_SPEAKER = ['M11 5 6 9H3v6h3l5 4z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M18.5 5.5a9.5 9.5 0 0 1 0 13'];
+  var ICON_NOTICE = ['M3 3h18v18H3z', 'M12 10.5V17', 'M12 7v.01'];
+
+  // The launcher's bubble: a yellow speech bubble with a dark question mark.
+  function questionBubble() {
+    var ns = 'http://www.w3.org/2000/svg';
+    var s = document.createElementNS(ns, 'svg');
+    s.setAttribute('viewBox', '0 0 32 32');
+    s.setAttribute('class', 'sfaf-qmark');
+    s.setAttribute('aria-hidden', 'true');
+    s.setAttribute('focusable', 'false');
+    [['sfaf-qmark-b', 'M2 2h28v21H13l-7 7v-7H2z'],
+     ['sfaf-qmark-q', 'M12.5 9.5a3.5 3.5 0 1 1 5.2 3.1c-1.1.6-1.7 1.3-1.7 2.6v.8'],
+     ['sfaf-qmark-d', 'M14.7 18.2h2.6v2.6h-2.6z']].forEach(function (p) {
+      var n = document.createElementNS(ns, 'path');
+      n.setAttribute('class', p[0]);
+      n.setAttribute('d', p[1]);
+      s.appendChild(n);
+    });
+    return s;
+  }
+
+  // An action button's inside: the fill that grows on hover, the label, and the arrow
+  // that comes in (left) and the one that goes out (right). Returns the label, whose
+  // text can be changed later without losing the rest.
+  function markFlow(node, labelText, dark) {
+    node.classList.add('sfaf-flow');
+    if (dark) node.classList.add('sfaf-flow-dark');
+    node.textContent = '';
+    node.appendChild(el('span', 'sfaf-flow-disc'));
+    var inArrow = svg(ICON_SEND);
+    inArrow.setAttribute('class', 'sfaf-flow-a sfaf-flow-in');
+    node.appendChild(inArrow);
+    var text = el('span', 'sfaf-flow-text', labelText);
+    node.appendChild(text);
+    var outArrow = svg(ICON_SEND);
+    outArrow.setAttribute('class', 'sfaf-flow-a sfaf-flow-out');
+    node.appendChild(outArrow);
+    return text;
+  }
 
   var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
   var canSpeak = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
@@ -423,7 +485,7 @@
   launcher.type = 'button';
   launcher.setAttribute('aria-haspopup', 'dialog');
   launcher.setAttribute('aria-expanded', 'false');
-  launcher.appendChild(svg(ICON_CHAT));
+  launcher.appendChild(questionBubble());
   launcher.appendChild(el('span', null, 'Ask SFAF'));
 
   var overlay = el('div', 'sfaf-overlay');
@@ -603,7 +665,8 @@
   }
 
   function apptLink(label) {
-    var a = el('a', 'sfaf-appt-link', label);
+    var a = el('a', 'sfaf-appt-link');
+    markFlow(a, label);
     a.href = '#sfaf-appointments';
     a.addEventListener('click', function (e) {
       // Without the chooser on the page, stay put rather than jump to a hash.
@@ -697,8 +760,7 @@
     a.href = link.url;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.appendChild(el('span', null, link.label || 'Learn more'));
-    a.appendChild(svg(ICON_ARROW));
+    markFlow(a, link.label || 'Learn more');
     messages.appendChild(a);
     scrollDown();
   }
@@ -709,8 +771,7 @@
     a.href = d.url;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.appendChild(el('span', null, d.label || 'Donate'));
-    a.appendChild(svg(ICON_ARROW));
+    markFlow(a, d.label || 'Donate');
     messages.appendChild(a);
     scrollDown();
   }
@@ -737,7 +798,8 @@
     body.appendChild(el('div', 'sfaf-card-kind', kind));
     body.appendChild(el('div', 'sfaf-card-title', card.title || ''));
     if (card.subtitle) body.appendChild(el('div', 'sfaf-card-sub', card.subtitle));
-    var cta = el('a', 'sfaf-card-cta', card.cta || (card.type === 'event' ? 'Event details' : 'Read more'));
+    var cta = el('a', 'sfaf-card-cta');
+    markFlow(cta, card.cta || (card.type === 'event' ? 'Event details' : 'Read more'), true);
     cta.href = card.url;
     cta.target = '_blank';
     cta.rel = 'noopener';
@@ -836,7 +898,10 @@
     alertsEl = el('div', 'sfaf-alert');
     alertsEl.setAttribute('role', 'note');
     alertsEl.setAttribute('aria-label', 'Notice');
-    alertsEl.appendChild(el('div', 'sfaf-alert-kind', list.length > 1 ? 'Notices' : 'Notice'));
+    var kind = el('div', 'sfaf-alert-kind');
+    kind.appendChild(svg(ICON_NOTICE));
+    kind.appendChild(el('span', null, list.length > 1 ? 'Notices' : 'Notice'));
+    alertsEl.appendChild(kind);
     list.forEach(function (t) { alertsEl.appendChild(el('p', null, t)); });
     messages.insertBefore(alertsEl, messages.firstChild);
   }
@@ -967,7 +1032,8 @@
 
   function addContact(label, team) {
     if (contactEl) { contactEl.remove(); contactEl = null; }
-    var b = el('button', 'sfaf-contactbtn', label);
+    var b = el('button', 'sfaf-contactbtn');
+    markFlow(b, label, true);
     b.type = 'button';
     b.addEventListener('click', function () { showContactForm(label, b, team || ''); });
     contactEl = b;
@@ -1026,7 +1092,8 @@
     var status = el('p', 'sfaf-contact-status');
     status.setAttribute('role', 'alert');
     var actions = el('div', 'sfaf-contact-actions');
-    var send = el('button', 'sfaf-contact-send', 'Send');
+    var send = el('button', 'sfaf-contact-send');
+    var sendText = markFlow(send, 'Send', true);
     send.type = 'submit';
     var cancel = el('button', 'sfaf-contact-cancel', 'Cancel');
     cancel.type = 'button';
@@ -1054,7 +1121,7 @@
       }
       status.textContent = '';
       send.disabled = true;
-      send.textContent = 'Sending…';
+      sendText.textContent = 'Sending…';
       fetch(CONTACT_URL, requestOptions({
         name: n, email: m, phone: ph, details: details.input.value.trim(), team: team,
         page: pageAddress(), thread: thread.slice(), website: hpInput.value
@@ -1065,7 +1132,7 @@
           if (!data || !data.ok) {
             status.textContent = (data && typeof data.error === 'string') ? data.error : ERROR_TEXT;
             send.disabled = false;
-            send.textContent = 'Send';
+            sendText.textContent = 'Send';
             return;
           }
           form.remove();
@@ -1077,7 +1144,7 @@
           if (mySession !== session) return;
           status.textContent = ERROR_TEXT;
           send.disabled = false;
-          send.textContent = 'Send';
+          sendText.textContent = 'Send';
         });
     });
 

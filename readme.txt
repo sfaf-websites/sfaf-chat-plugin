@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.17.0
+Stable tag: 1.18.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,32 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.18.0 =
+* Notices at the top of the chat (closures, alerts) are a filled yellow block with dark
+  text and a bold NOTICE label with an icon.
+* Every action button in the chat (page links, Donate, Make an appointment, card buttons
+  such as Event details, Contact our team, and the contact form's Send) has the animated
+  hover: a fill grows from the middle, yellow and dark trade places, and the arrow leaves
+  on the right as another comes in on the left. Keyboard focus does the same. The buttons
+  are uppercase, bold, 16px, at least 48px tall. Contact our team is now a dark button.
+* The Ask SFAF launcher has a new icon: a larger yellow speech bubble with a dark question
+  mark that sits across the launcher's top edge, half inside and half above. Position,
+  background and label are unchanged.
+* Questions about who leads SFAF now ("Who is the CEO?") are answered from the Our
+  Leadership page, in the present tense, rather than from the 2022 blog post announcing
+  the appointment. Where only a post names the person, the fact is stated plainly, with no
+  mention of the post or its date and no link to it.
+* The indexer keeps a header or footer that belongs to an article, such as each person
+  card's role on Our Leadership, which it used to drop with the page's own header and
+  footer. Every indexed page is read again once on the next run.
+* "CEO", "executive", "leadership", "leader" and "lead" now find each other when ranking
+  pages.
+* The Make an appointment button also appears when the answer tells someone to set up one
+  of the four visits the chooser covers (express sexual health screening, screening with
+  an RN, PrEP enrollment, PrEP follow-up), as in "Can I get PrEP now?". Never for other
+  appointment types such as counseling, mental health or a substance use intake, and left
+  out when in doubt.
 
 = 1.17.0 =
 * The contact form is offered when someone wants to reach a person ("who can I contact",
