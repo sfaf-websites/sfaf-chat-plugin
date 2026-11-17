@@ -327,7 +327,8 @@ Respond with ONLY a single JSON object. No markdown, no code fences, no text bef
   "wants_person": true or false,
   "fully_answered": true or false,
   "contact_team": "a team name from CONTACT FORM, or null",
-  "harm_reduction": true or false
+  "harm_reduction": true or false,
+  "warm_lead": true or false
 }
 
 - "in_scope" is false whenever you declined for any reason.
@@ -347,6 +348,11 @@ Respond with ONLY a single JSON object. No markdown, no code fences, no text bef
   "unanswered").
 - "harm_reduction" is true when your answer gives substance-use dosing, amounts, or
   safer-use how-to (see "Harm reduction label"), otherwise false.
+- "warm_lead" is true when the message shows interest in donating, signing up for an
+  event or a ride (such as Cycle to Zero), or a fundraising event, AND has an open
+  question: they're considering it, hesitating, or asking something a person could help
+  with. False for a direct, ready-to-act question ("How do I donate?", "How do I sign up
+  for Cycle to Zero?") and for every other subject.
 - "topic" is the subject of the person's latest message, meaning what it is ABOUT, even when
   you decline it (a personal PEP question is still "prep-pep"). It is used only to count which
   subjects people ask about. Use "off-topic" for anything unrelated to SFAF, including

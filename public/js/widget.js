@@ -97,6 +97,10 @@
     '  --sfaf-on-accent:#373433;',
     '  --sfaf-error-bg:#fdf1ee;',
     '  --sfaf-error-border:#d9a79b;',
+    // The harm reduction label (1.20.0): a soft tint of the brand red #F04937 behind it,
+    // the full red only on its edge, so it reads as a caution without alarm.
+    '  --sfaf-caution-bg:#FDE9E7;',
+    '  --sfaf-caution-edge:#F04937;',
     '  --sfaf-focus:#373433;',
     '  --sfaf-focus-on-dark:#FFD900;',
     '  --sfaf-bot-bg:#ffffff;',
@@ -210,6 +214,9 @@
     '  animation:sfaf-rise .34s var(--sfaf-ease) both;}',
     '@keyframes sfaf-rise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}',
     '#sfaf-chat .sfaf-msg .sfaf-p{margin:0;}',
+    // A fixed text color, like the error, so it stays readable whatever the bubble colors are.
+    '#sfaf-chat .sfaf-msg .sfaf-p.sfaf-caution{background:var(--sfaf-caution-bg);border-left:3px solid var(--sfaf-caution-edge);',
+    '  color:#373433;padding:6px 10px;font-weight:600;}',
     '#sfaf-chat .sfaf-msg .sfaf-p+.sfaf-p,#sfaf-chat .sfaf-msg .sfaf-list+.sfaf-p{margin-top:8px;}',
     '#sfaf-chat .sfaf-msg .sfaf-list{margin:6px 0 0;padding-left:20px;white-space:normal;}',
     '#sfaf-chat .sfaf-msg .sfaf-list li{margin:0;}',
@@ -224,6 +231,8 @@
     '#sfaf-chat .sfaf-msg a.sfaf-tel{color:inherit;text-decoration:underline;',
     '  text-underline-offset:2px;font-weight:600;}',
     '#sfaf-chat a.sfaf-tel{white-space:nowrap;}',
+    // A long address must wrap inside the bubble, never push it wider (1.20.0).
+    '#sfaf-chat a.sfaf-url,#sfaf-chat a.sfaf-mail{white-space:normal;overflow-wrap:anywhere;}',
     '#sfaf-chat .sfaf-msg a.sfaf-appt-link{margin:6px 0 2px;white-space:nowrap;}',
 
     /*
@@ -657,12 +666,81 @@
 
   function telLink(num) {
     var a = el('a', 'sfaf-tel', num);
-    a.href = 'tel:+1' + num.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+    var digits = num.replace(/\D/g, '');
+    a.href = digits.length === 3 ? 'tel:' + digits : 'tel:+1' + digits.replace(/^1(?=\d{10}$)/, '');
     return a;
   }
 
-  // Plain text, with US phone numbers turned into tap-to-call links.
-  var PHONE_RE = /(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})/g;
+  /*
+   * AUTO-LINKS (1.20.0). In a reply's text, these become working links:
+   *   an email address            mailto:, any address
+   *   a web address               only on our own sites (OUR_HOST_RE), opened in a new
+   *                               tab, always https. Any other address stays plain text,
+   *                               so a model reply can never put a link to an outside or
+   *                               made-up site in front of a visitor.
+   *   a US phone number           tel:+1...
+   *   988 or 911                  tel:, only beside "call", "text", "dial" (or Spanish),
+   *                               "988 Suicide & Crisis Lifeline" or "911 in an emergency",
+   *                               never a bare number
+   * One pass, left to right, so an email's domain is never linked on its own.
+   */
+  var LINK_RE = new RegExp([
+    '([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,})',
+    '((?:https?:\\/\\/|www\\.)[^\\s<>"\'()\\[\\]]+|\\b(?:[A-Za-z0-9-]+\\.)+(?:org|com|net)\\b(?:\\/[^\\s<>"\'()\\[\\]]*)?)',
+    '(\\(?\\d{3}\\)?[\\s.-]\\d{3}[\\s.-]\\d{4})',
+    '\\b(988|911)\\b'
+  ].join('|'), 'g');
+  var OUR_HOST_RE = /(^|\.)(sfaf\.org|tweaker\.org|cycletozero\.org)$/i;
+  var SHORT_BEFORE_RE = /\b(call|text|dial|llam[ae]|llamar|marc[ae]|marcar|env[ií]a|mensaje)\b[^.\n]{0,12}$/i;
+  var SHORT_AFTER_RE = /^\s*(suicide|crisis|lifeline|l[ií]nea|in an emergency|en (caso de )?(una )?emergencia)/i;
+
+  // An address on our own sites, as an https URL; null for anything else.
+  function ourUrl(raw) {
+    var u = /^https?:\/\//i.test(raw) ? raw.replace(/^http:/i, 'https:') : 'https://' + raw;
+    try {
+      var p = new URL(u);
+      return OUR_HOST_RE.test(p.hostname) ? p.href : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Plain text, with emails, our web addresses and phone numbers as links.
+  function linkify(target, text) {
+    var s = String(text);
+    var last = 0;
+    var m;
+    LINK_RE.lastIndex = 0;
+    while ((m = LINK_RE.exec(s))) {
+      var found = m[0];
+      var link = null;
+      if (m[1]) {
+        link = el('a', 'sfaf-tel sfaf-mail', found);
+        link.href = 'mailto:' + found;
+      } else if (m[2]) {
+        // Sentence punctuation after an address isn't part of it.
+        found = found.replace(/[.,;:!?'"]+$/, '');
+        var url = ourUrl(found);
+        if (url) {
+          link = el('a', 'sfaf-tel sfaf-url', found);
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noopener';
+        }
+      } else if (m[3]) {
+        link = telLink(found);
+      } else if (m[4] && (SHORT_BEFORE_RE.test(s.slice(Math.max(0, m.index - 40), m.index)) ||
+          SHORT_AFTER_RE.test(s.slice(m.index + found.length)))) {
+        link = telLink(found);
+      }
+      if (!link) continue;
+      if (m.index > last) target.appendChild(document.createTextNode(s.slice(last, m.index)));
+      target.appendChild(link);
+      last = m.index + found.length;
+      LINK_RE.lastIndex = last;
+    }
+    if (last < s.length) target.appendChild(document.createTextNode(s.slice(last)));
+  }
   /*
    * The appointment chooser (served with this script, see SFAF_Chat_Widget::
    * appointments()). A reply's [label](#sfaf-appointments) becomes a link to it, and
@@ -703,8 +781,9 @@
     return a;
   }
 
-  // Text with booking links, phone numbers as tap-to-call links, and **bold** as
-  // <strong>. Built from text nodes only: nothing in a reply is ever parsed as HTML.
+  // Text with booking links, emails, our web addresses and phone numbers as links
+  // (linkify), and **bold** as <strong>. Built from text nodes and elements only:
+  // nothing in a reply is ever parsed as HTML.
   function inline(node, text) {
     var parts = String(text).split(APPT_RE);
     for (var i = 0; i < parts.length; i++) {
@@ -718,12 +797,7 @@
     for (var b = 0; b < bold.length; b++) {
       var target = node;
       if (b % 2 === 1) { target = el('strong'); node.appendChild(target); }
-      var parts = bold[b].split(PHONE_RE);
-      for (var i = 0; i < parts.length; i++) {
-        if (!parts[i]) continue;
-        if (i % 2 === 1) target.appendChild(telLink(parts[i]));
-        else target.appendChild(document.createTextNode(parts[i]));
-      }
+      if (bold[b]) linkify(target, bold[b]);
     }
   }
 
@@ -1018,7 +1092,12 @@
         if (!data || !data.ok || typeof data.answer !== 'string') throw new Error('bad reply');
 
         showTyping(false);
-        addBubble('bot', data.answer);
+        var bubble = addBubble('bot', data.answer);
+        // The server put the harm reduction label first: shown as a caution (1.20.0).
+        if (data.harm_reduction === true && bubble.firstChild && bubble.firstChild.classList &&
+            bubble.firstChild.classList.contains('sfaf-p')) {
+          bubble.firstChild.classList.add('sfaf-caution');
+        }
         if (data.card) addCard(data.card);
         else if (data.link) addLink(data.link);
         if (data.donate) addDonate(data.donate);

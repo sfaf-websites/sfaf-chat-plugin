@@ -10,7 +10,10 @@
  * "fully_answered". Contact intent offers the form whatever the answer says, even
  * when it also gives a phone number, which the prompt has the model offer beside
  * it. Without that intent, a service question (SERVICE_TOPICS) that was not fully
- * answered offers it, unless the answer already gave a phone number or email. Never
+ * answered offers it, unless the answer already gave a phone number or email. And
+ * (1.20.0) a warm lead on giving or signing up ("warm_lead": interested, with an
+ * open question) offers it on CTA_TOPICS, while a direct "how do I donate?" gets
+ * only the link or the Donate button. Never
  * on a crisis reply, which points to a person by phone, never out of scope, never
  * beside a booking link. Never unless the form is switched on, a Postmark token is
  * saved and a default recipient is set.
@@ -79,13 +82,23 @@ class SFAF_Chat_Contact {
      *   skip_if_contact_given     ...but not that second case when the answer already
      *                             has a phone number or email
      *   skip_if_booking_link      never beside the booking link, its own way through
+     *   on_warm_lead              (1.20.0) show it when the model says the visitor is
+     *                             interested in giving or signing up (CTA_TOPICS) AND
+     *                             has an open question, even if the answer gives a phone
+     *                             number or email. A direct, ready-to-act ask ("how do I
+     *                             donate?") is not a warm lead: it gets the link or the
+     *                             Donate button and no box.
      */
     const OFFER_RULE = array(
         'on_contact_intent'       => true,
         'when_not_fully_answered' => true,
         'skip_if_contact_given'   => true,
         'skip_if_booking_link'    => true,
+        'on_warm_lead'            => true,
     );
+
+    /** Fund-generating and sign-up topics, where a warm lead is offered a person (1.20.0). */
+    const CTA_TOPICS = array( 'donate', 'events' );
 
     /** A phone number (415-487-3000, (415) 487-3000, 415.487.3000) or an email address. */
     const DIRECT_CONTACT = '/(?:\(\d{3}\)\s*|\b\d{3}[\s.\-])\d{3}[\s.\-]\d{4}\b|[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i';
@@ -197,11 +210,11 @@ class SFAF_Chat_Contact {
      *
      * @return array{label:string, team:string}|null
      */
-    public static function offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered, $model_team = null ) {
+    public static function offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered, $model_team = null, $warm_lead = false ) {
         if ( ! self::ready() || 'crisis' === $flag || 'out_of_scope' === $flag ) {
             return null;
         }
-        if ( ! self::wanted( (string) $answer, (bool) $wants_person, (bool) $fully_answered && 'unanswered' !== $flag, (string) $topic ) ) {
+        if ( ! self::wanted( (string) $answer, (bool) $wants_person, (bool) $fully_answered && 'unanswered' !== $flag, (string) $topic, (bool) $warm_lead ) ) {
             return null;
         }
         list( $team, , $matched ) = self::resolve( $model_team, $page );
@@ -209,12 +222,15 @@ class SFAF_Chat_Contact {
     }
 
     /** OFFER_RULE applied to one reply. */
-    public static function wanted( $answer, $wants_person, $fully_answered, $topic = '' ) {
+    public static function wanted( $answer, $wants_person, $fully_answered, $topic = '', $warm_lead = false ) {
         $rule = self::OFFER_RULE;
         if ( $rule['skip_if_booking_link'] && false !== strpos( (string) $answer, '](#sfaf-appointments)' ) ) {
             return false;
         }
         if ( $rule['on_contact_intent'] && $wants_person ) {
+            return true;
+        }
+        if ( $rule['on_warm_lead'] && $warm_lead && in_array( (string) $topic, self::CTA_TOPICS, true ) ) {
             return true;
         }
         if ( ! $rule['when_not_fully_answered'] || $fully_answered || ! in_array( (string) $topic, self::SERVICE_TOPICS, true ) ) {

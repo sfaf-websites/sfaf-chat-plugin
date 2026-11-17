@@ -776,6 +776,8 @@ class SFAF_Chat_Endpoint {
                         'contact_team'   => array( 'type' => 'string', 'nullable' => true ),
                         // Dosing or safer-use specifics: see HARM_REDUCTION_LINE (1.19.0).
                         'harm_reduction' => array( 'type' => 'boolean' ),
+                        // Interest in giving or signing up, with an open question (1.20.0).
+                        'warm_lead'      => array( 'type' => 'boolean' ),
                     ),
                     'required'   => array( 'answer', 'in_scope', 'topic' ),
                 ),
@@ -891,6 +893,8 @@ class SFAF_Chat_Endpoint {
         $fully_answered = false !== ( $parsed['fully_answered'] ?? true );
         // Only a name from the configured list counts; SFAF_Chat_Contact::resolve() checks.
         $contact_team = is_string( $parsed['contact_team'] ?? null ) ? mb_substr( $parsed['contact_team'], 0, 100 ) : '';
+        // A warm lead on giving or signing up (1.20.0); anything but true reads as no.
+        $warm_lead = true === ( $parsed['warm_lead'] ?? null );
 
         // A declined or crisis reply never points to a blog post: a post is a story or a
         // perspective, not a next step, and it may be out of date. The answer still goes.
@@ -928,7 +932,8 @@ class SFAF_Chat_Endpoint {
 
         // The harm reduction label goes first, after any pin, and whatever the flag: it
         // says what the content is, it never decides whether the content is shown.
-        if ( true === ( $parsed['harm_reduction'] ?? null ) ) {
+        $harm_reduction = true === ( $parsed['harm_reduction'] ?? null );
+        if ( $harm_reduction ) {
             $answer = self::with_harm_reduction_line( $answer );
         }
 
@@ -966,8 +971,11 @@ class SFAF_Chat_Endpoint {
             'card'     => $card,
             'in_scope' => $answered_in_scope,
             // "Contact our team": set up, and by OFFER_RULE; routed to the model's team.
-            'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered, $contact_team ),
+            'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered, $contact_team, $warm_lead ),
             'donate'   => $donate,
+            // The answer's first paragraph is the harm reduction label: the widget shows
+            // it as a caution (1.20.0). Styling only; the text is already in the answer.
+            'harm_reduction' => $harm_reduction,
         ), 200 );
     }
 
@@ -1042,7 +1050,15 @@ class SFAF_Chat_Endpoint {
             . "If the knowledge gives a phone number for that team or service, give it too, as the quickest "
             . "way to reach them; they can choose.\n"
             . "- Don't offer it on an ordinary question you fully answered, and don't set \"wants_person\" "
-            . "just because your answer mentions a phone number.\n";
+            . "just because your answer mentions a phone number.\n"
+            . "- Giving and signing up (donating, signing up for an event or a ride such as Cycle to Zero, a "
+            . "fundraising event): a direct, ready-to-act question (\"How do I donate?\", \"How do I sign up "
+            . "for Cycle to Zero?\") gets the way to do it: link the page, and don't mention the form. When "
+            . "they show interest AND have an open question (they're considering it, hesitating, or asking "
+            . "something a person could help them with, such as \"I'm thinking about riding but I've never "
+            . "done anything like it\" or \"I'd like to give but want to know where the money goes\"), answer "
+            . "what you can, set \"warm_lead\" to true, and say they can send our team a message here with the "
+            . "button below if they'd like to talk it through.\n";
         if ( array() !== $teams ) {
             $out .= "- Set \"contact_team\" to the team below that handles what they want to reach us about, by "
                 . "the subject of the question, not the page they are on. Write its name exactly as given. Use "

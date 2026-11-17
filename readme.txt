@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.19.0
+Stable tag: 1.20.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,20 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.20.0 =
+* Giving and signing up (donating, events, Cycle to Zero and other rides, fundraising
+  events): a direct, ready-to-act question ("How do I donate?") gets the link or the
+  Donate button and no contact box. Someone who shows interest and has an open question
+  (considering it, unsure, asking where the money goes) is offered the contact box so they
+  can reach a person, beside the link. The existing reasons to offer it are unchanged.
+* Email addresses, web addresses and phone numbers in a reply are working links: emails
+  open a new email, phone numbers call, and 988 and 911 call when the reply says to call
+  or text them. Web addresses on our own sites (sfaf.org, tweaker.org, cycletozero.org)
+  open in a new tab; any other web address stays plain text, so a reply can never link to
+  an outside or made-up site.
+* The harm reduction label, in English and Spanish, shows as a caution: dark text on a
+  light tint of the brand red with a red edge. Styling only: when it is added is unchanged.
 
 = 1.19.0 =
 * Leadership questions ("Who is the CEO?", "Who runs SFAF?", "Who is the director of
