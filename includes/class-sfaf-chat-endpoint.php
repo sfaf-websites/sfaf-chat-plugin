@@ -89,6 +89,63 @@ class SFAF_Chat_Endpoint {
     const POST_DECLINE_FLAGS = array( 'personal_advice', 'out_of_scope', 'crisis' );
 
     /*
+     * PAGES FOR A KIND OF QUESTION (1.19.0). Leadership, board and job questions each
+     * have one page that answers them, so when the live question is that kind, the page
+     * goes first in RELATED PAGES whatever the ranking says. For leadership and board
+     * ('no_posts'), blog posts are then left out altogether: an old post about an
+     * appointment must never answer "who is the CEO". Whole words, any case, the live
+     * question only. Paths are on www.sfaf.org. See topic_pages().
+     * Deliberately absent: bare "president" (news about the US President) and the
+     * Board of Supervisors, school board and the like, where blog posts matter.
+     */
+    const TOPIC_PAGES = array(
+        'leadership' => array(
+            'path'     => '/about/team/',
+            'no_posts' => true,
+            're'       => '/\b(ceo|cfo|coo|chief|vice president|director|directora|leadership|liderazgo|senior staff|management team|head of|in charge|who (leads|runs|heads|manages))\b/i',
+        ),
+        'board'      => array(
+            'path'     => '/about/dev-board-of-directors/',
+            'no_posts' => true,
+            're'       => '/(?<!school )\b(board(?! of (supervisors|education|health))|directors|trustees?|junta directiva)\b/i',
+        ),
+        'careers'    => array(
+            'path'     => '/about/careers/',
+            'no_posts' => false,
+            're'       => '/\b(jobs?|careers?|hiring|employment|open positions?|positions? (open|available)|vacanc(y|ies)|work (for|at) (sfaf|you|the foundation)|empleos?|vacantes?)\b/i',
+        ),
+    );
+
+    /*
+     * JOBS (1.19.0). Our Careers page loads its openings from Greenhouse with a script,
+     * so the page as indexed has none. A Greenhouse board page for SFAF (added by hand
+     * on the Indexing screen) has them. It is folded into the Careers page before the
+     * model sees anything: the model reads the openings as part of our own page, and the
+     * link is always the Careers page, never Greenhouse.
+     */
+    const CAREERS_URL    = 'https://www.sfaf.org/about/careers/';
+    const JOBS_BOARD_RE  = '#^https?://(job-)?boards(\.eu)?\.greenhouse\.io/sfaf(?:[/?\#]|$)#i';
+    const JOBS_BOARD_JUNK = array(
+        '/Create a Job Alert.*?Create alert/isu',
+        '/Search\s+Department\s+Select\.*\s*Office\s+Select\.*/iu',
+        '/Powered by Greenhouse/iu',
+        '/(Jobs|Current openings) at San Francisco AIDS Foundation/iu',
+    );
+
+    /*
+     * HARM REDUCTION LABEL (1.19.0). When the model says its answer gives substance-use
+     * dosing, amounts or safer-use how-to (the "harm_reduction" field), this line goes
+     * first, like the "Blog post" label: added so the reader knows what the content is.
+     * It is a label, not a gate. Nothing is ever taken out because of it, and it stays
+     * whatever else the reply carries. The model never writes it; the line is taken back
+     * out of earlier turns, so the model doesn't copy it into answers that aren't dosing.
+     */
+    const HARM_REDUCTION_LINE = array(
+        'en' => 'This is general harm reduction information, not medical advice.',
+        'es' => 'Esta es información general de reducción de daños, no consejo médico.',
+    );
+
+    /*
      * RETRIES. Google answers 503 under load, often for a moment, so one failure must
      * not reach the visitor. Same model every time: there is deliberately no second
      * model, because a different model hasn't had its refusals tested.
@@ -366,7 +423,10 @@ class SFAF_Chat_Endpoint {
             if ( 'user' === $role ) {
                 $user_turns[] = $text;
             } else {
-                $text = SFAF_Chat_Core::no_em_dash( $text );
+                $text = SFAF_Chat_Core::no_em_dash( self::without_harm_reduction_line( $text ) );
+                if ( '' === $text ) {
+                    continue;
+                }
             }
 
             $contents[] = array( 'role' => $role, 'parts' => array( array( 'text' => $text ) ) );
@@ -417,9 +477,14 @@ class SFAF_Chat_Endpoint {
             $candidates       = array();
             $post_candidates  = array();
             $other_candidates = array();
+            $jobs_boards      = array();
             foreach ( $index['records'] as $r ) {
                 if ( ! is_array( $r ) || ! isset( $r['id'], $r['url'] ) || ! $in_scope_source( $r )
                     || isset( $core_urls[ $url_key( $r['url'] ) ] ) ) {
+                    continue;
+                }
+                if ( preg_match( self::JOBS_BOARD_RE, (string) $r['url'] ) ) {
+                    $jobs_boards[] = $r;   // folded into the Careers page below
                     continue;
                 }
                 if ( ! SFAF_Chat_Indexer::is_own( $r['source'] ?? '' ) ) {
@@ -470,11 +535,26 @@ class SFAF_Chat_Endpoint {
                 $subject_pages = array( $mine[0] );
             }
 
+            $candidates = self::fold_jobs_boards( $candidates, $jobs_boards );
+
             $related     = SFAF_Chat_Core::rank_records( $candidates, $query, self::PREFILTER_TOP_N );
             $other_pages = SFAF_Chat_Core::rank_records( array_values( $other_candidates ), $query, self::OTHER_TOP_N );
             $ranked      = SFAF_Chat_Core::rank_records( $post_candidates, $query, self::POST_TOP_N + self::POST_TITLES_N );
             $posts       = array_slice( $ranked, 0, self::POST_TOP_N );
             $post_titles = array_slice( $ranked, self::POST_TOP_N );
+
+            // Leadership, board and job questions: their page first, whatever the ranking.
+            list( $first, $no_posts ) = self::topic_pages( $question, $candidates );
+            if ( array() !== $first ) {
+                $ids     = array_column( $first, 'id' );
+                $related = array_slice( array_merge( $first, array_values( array_filter( $related, function ( $r ) use ( $ids ) {
+                    return ! in_array( $r['id'], $ids, true );
+                } ) ) ), 0, self::PREFILTER_TOP_N );
+            }
+            if ( $no_posts ) {
+                $posts       = array();
+                $post_titles = array();
+            }
         }
 
         // Tier 3: live events from the calendar on this site, matched to the question.
@@ -694,6 +774,8 @@ class SFAF_Chat_Endpoint {
                         'fully_answered' => array( 'type' => 'boolean' ),
                         // A team from CONTACT FORM, or null (1.17.0).
                         'contact_team'   => array( 'type' => 'string', 'nullable' => true ),
+                        // Dosing or safer-use specifics: see HARM_REDUCTION_LINE (1.19.0).
+                        'harm_reduction' => array( 'type' => 'boolean' ),
                     ),
                     'required'   => array( 'answer', 'in_scope', 'topic' ),
                 ),
@@ -844,6 +926,12 @@ class SFAF_Chat_Endpoint {
             }
         }
 
+        // The harm reduction label goes first, after any pin, and whatever the flag: it
+        // says what the content is, it never decides whether the content is shown.
+        if ( true === ( $parsed['harm_reduction'] ?? null ) ) {
+            $answer = self::with_harm_reduction_line( $answer );
+        }
+
         // Donate button: a donation question, answered. It replaces a plain link to
         // the same page, so the visitor sees one way to give, not two.
         $donate = null;
@@ -984,6 +1072,121 @@ class SFAF_Chat_Endpoint {
      * short one that names no subject ("how do I sign up?") is a follow-up, so the
      * previous question counts. A longer one has moved on, and the thread doesn't.
      */
+    /**
+     * The pages for this kind of question (TOPIC_PAGES), found among our indexed pages,
+     * and whether blog posts stay out. A kind whose page isn't in the index adds nothing
+     * and keeps posts, so the prompt's fallback (a post can name a leader) still works.
+     *
+     * @return array{0: array[], 1: bool}
+     */
+    private static function topic_pages( $question, array $pages ) {
+        $first    = array();
+        $no_posts = false;
+        foreach ( self::TOPIC_PAGES as $kind ) {
+            if ( ! preg_match( $kind['re'], (string) $question ) ) {
+                continue;
+            }
+            foreach ( $pages as $r ) {
+                if ( self::is_sfaf_path( (string) ( $r['url'] ?? '' ), $kind['path'] ) ) {
+                    $first[]  = $r;
+                    $no_posts = $no_posts || $kind['no_posts'];
+                    break;
+                }
+            }
+        }
+        return array( $first, $no_posts );
+    }
+
+    /** Is this address www.sfaf.org (or sfaf.org) at exactly this path? */
+    private static function is_sfaf_path( $url, $path ) {
+        $parts = wp_parse_url( $url );
+        $host  = strtolower( (string) ( $parts['host'] ?? '' ) );
+        return in_array( $host, array( 'www.sfaf.org', 'sfaf.org' ), true )
+            && rtrim( (string) ( $parts['path'] ?? '' ), '/' ) === rtrim( $path, '/' );
+    }
+
+    /**
+     * JOBS: the Greenhouse board's openings go into our Careers page record, first,
+     * so the model reads them as our own page and the only link is the Careers page.
+     * With no Careers page indexed, the board stands in for it under the Careers
+     * address, as our page. Greenhouse's own words (alerts, filters, "Powered by")
+     * are taken out. Nothing changes when no board is indexed.
+     */
+    private static function fold_jobs_boards( array $candidates, array $boards ) {
+        if ( array() === $boards ) {
+            return $candidates;
+        }
+        $openings = array();
+        foreach ( $boards as $b ) {
+            $text = (string) ( $b['text'] ?? $b['content'] ?? '' );
+            foreach ( self::JOBS_BOARD_JUNK as $re ) {
+                $text = (string) preg_replace( $re, ' ', $text );
+            }
+            $text = trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+            if ( '' !== $text ) {
+                $openings[] = $text;
+            }
+        }
+        $lead = array() === $openings ? '' : 'Our current job openings: ' . implode( ' ', $openings ) . ' ';
+
+        foreach ( $candidates as $i => $r ) {
+            if ( self::is_sfaf_path( (string) $r['url'], wp_parse_url( self::CAREERS_URL, PHP_URL_PATH ) ) ) {
+                $candidates[ $i ]['text'] = $lead . (string) ( $r['text'] ?? $r['content'] ?? '' );
+                unset( $candidates[ $i ]['content'] );
+                return $candidates;
+            }
+        }
+
+        $b            = $boards[0];
+        $candidates[] = array(
+            'id'       => (string) $b['id'],
+            'title'    => 'Careers',
+            'url'      => self::CAREERS_URL,
+            'source'   => 'sfaf.org',
+            'type'     => 'page',
+            'keywords' => array( 'careers', 'jobs', 'hiring', 'employment' ),
+            'og'       => array(),
+            'text'     => trim( $lead ),
+        );
+        return $candidates;
+    }
+
+    /**
+     * The label, first, in the answer's language. Not added twice: an answer that
+     * already starts with either wording keeps just that one.
+     */
+    private static function with_harm_reduction_line( $answer ) {
+        $answer = (string) $answer;
+        $bare   = self::without_harm_reduction_line( $answer );
+        $line   = self::looks_spanish( $bare ) ? self::HARM_REDUCTION_LINE['es'] : self::HARM_REDUCTION_LINE['en'];
+        return '' === $bare ? $line : $line . "\n\n" . $bare;
+    }
+
+    /** The answer with either wording of the label taken off its start. */
+    private static function without_harm_reduction_line( $text ) {
+        $text = ltrim( (string) $text );
+        foreach ( self::HARM_REDUCTION_LINE as $line ) {
+            if ( 0 === mb_stripos( $text, $line ) ) {
+                return ltrim( mb_substr( $text, mb_strlen( $line ) ) );
+            }
+        }
+        return $text;
+    }
+
+    /**
+     * Rough, and only used to pick the label's language: more common Spanish words than
+     * English ones, or Spanish punctuation. A tie reads as English.
+     */
+    private static function looks_spanish( $text ) {
+        $t = ' ' . mb_strtolower( (string) $text ) . ' ';
+        if ( preg_match( '/[¿¡ñ]/u', $t ) ) {
+            return true;
+        }
+        $es = preg_match_all( '/\b(el|la|los|las|de|del|que|y|es|en|para|con|una?|por|puede|nuestra?|más|dosis)\b/u', $t );
+        $en = preg_match_all( '/\b(the|and|is|of|to|for|with|you|your|it|can|our|more|dose|in)\b/u', $t );
+        return $es > $en;
+    }
+
     private static function subject_sources( $question, array $earlier_user_turns ) {
         $now = SFAF_Chat_Indexer::subject_sources( $question );
         if ( array() !== $now || array() === $earlier_user_turns ) {

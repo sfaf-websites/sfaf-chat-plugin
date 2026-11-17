@@ -105,7 +105,9 @@
     '  --sfaf-user-text:#ffffff;',
     '  --sfaf-radius:0px;',
     '  --sfaf-overlay:rgba(55,52,51,.48);',
-    '  --sfaf-shadow:0 28px 72px rgba(35,33,32,.3);',
+    // Layered, so the panel lifts off the dimmed page: a close contact shadow, a middle
+    // one and a wide soft one (1.19.0). Phones go full screen and drop it.
+    '  --sfaf-shadow:0 2px 4px rgba(0,0,0,.14),0 12px 28px rgba(0,0,0,.22),0 32px 80px rgba(0,0,0,.36);',
     '  --sfaf-panel-w:560px;',
     '  --sfaf-panel-h:720px;',
     '  --sfaf-ease:cubic-bezier(.16,1,.3,1);',
@@ -136,7 +138,10 @@
     // accent ring inside the edge carries it on dark backgrounds, a faint light hairline
     // just outside keeps it even if the accent is set dark, and a soft shadow lifts it
     // off light ones. Shadows, not borders, so the size matched to Weglot is unchanged.
-    '  box-shadow:inset 0 0 0 1px var(--sfaf-accent),0 0 0 1px rgba(255,255,255,.4),0 2px 12px rgba(0,0,0,.28);',
+    // It sits on the bottom edge of the window, so the lift (1.19.0) also reaches up
+    // and out, where it can be seen.
+    '  box-shadow:inset 0 0 0 1px var(--sfaf-accent),0 0 0 1px rgba(255,255,255,.4),0 2px 12px rgba(0,0,0,.28),',
+    '    0 -4px 14px rgba(0,0,0,.16),0 8px 28px rgba(0,0,0,.18);',
     '  transition:background .16s ease;}',
     '#sfaf-chat .sfaf-launcher:hover{background:var(--sfaf-dark-hover);}',
     // Inset, because the page behind may be white and the bottom edge would clip it.
@@ -144,12 +149,21 @@
     // The question bubble straddles the top edge: its body half inside, half above.
     // A child of the launcher, so it shares the launcher's layer (above Weglot's 9999)
     // and its click. The dark outline and shadow keep it visible on a white page.
-    '#sfaf-chat .sfaf-launcher .sfaf-qmark{position:absolute;left:7px;top:-12px;width:32px;height:32px;',
-    '  filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));transition:transform .2s var(--sfaf-ease);}',
-    '#sfaf-chat .sfaf-launcher:hover .sfaf-qmark,#sfaf-chat .sfaf-launcher:focus-visible .sfaf-qmark{transform:translateY(-2px);}',
-    '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{fill:var(--sfaf-accent);stroke:var(--sfaf-dark);stroke-width:2;}',
-    '#sfaf-chat .sfaf-qmark .sfaf-qmark-q{fill:none;stroke:var(--sfaf-dark);stroke-width:2.6;}',
+    // Its one motion plays once on load; JS ends it (sfaf-qmark-done) so reopening the
+    // launcher doesn't replay it, and reduced motion turns it off with the rest.
+    '#sfaf-chat .sfaf-launcher .sfaf-qmark{position:absolute;left:7px;top:-12px;width:32px;height:32px;overflow:visible;',
+    '  transition:transform .2s var(--sfaf-ease);}',
+    '#sfaf-chat .sfaf-launcher .sfaf-qmark.sfaf-qmark-done{animation:none;}',
+    '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{fill:var(--sfaf-accent);stroke:var(--sfaf-dark);stroke-linejoin:round;}',
+    '#sfaf-chat .sfaf-qmark .sfaf-qmark-q{fill:none;stroke:var(--sfaf-dark);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;}',
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-d{fill:var(--sfaf-dark);stroke:none;}',
+    // BUBBLE:START variant A, "Soft": rounded corners, a short tail, one gentle bob.
+    '#sfaf-chat .sfaf-launcher .sfaf-qmark{filter:drop-shadow(0 1px 1px rgba(0,0,0,.28)) drop-shadow(0 4px 6px rgba(0,0,0,.22));',
+    '  animation:sfaf-q-bob 1.2s var(--sfaf-ease) .7s 1 both;}',
+    '#sfaf-chat .sfaf-launcher:hover .sfaf-qmark,#sfaf-chat .sfaf-launcher:focus-visible .sfaf-qmark{transform:translateY(-2px);}',
+    '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{stroke-width:2;}',
+    '@keyframes sfaf-q-bob{0%,55%,100%{transform:none;}30%{transform:translateY(-6px);}75%{transform:translateY(-2px);}}',
+    // BUBBLE:END
     '#sfaf-chat.sfaf-open .sfaf-launcher{display:none;}',
 
     // Overlay
@@ -422,7 +436,15 @@
   var ICON_SPEAKER = ['M11 5 6 9H3v6h3l5 4z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M18.5 5.5a9.5 9.5 0 0 1 0 13'];
   var ICON_NOTICE = ['M3 3h18v18H3z', 'M12 10.5V17', 'M12 7v.01'];
 
-  // The launcher's bubble: a yellow speech bubble with a dark question mark.
+  // The launcher's bubble: a yellow speech bubble with a dark question mark. Its shape
+  // and motion live between the BUBBLE markers here and in the CSS, and nowhere else.
+  // BUBBLE:START variant A, "Soft"
+  var BUBBLE = [
+    ['sfaf-qmark-b', 'M8 2h16a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6H14.5l-5.7 5.2c-.64.58-1.66.13-1.66-.73V23H8a6 6 0 0 1-6-6V8a6 6 0 0 1 6-6z'],
+    ['sfaf-qmark-q', 'M12.6 9.4a3.4 3.4 0 1 1 4.9 3.05c-1 .5-1.5 1.15-1.5 2.25v.6'],
+    ['sfaf-qmark-d', 'M16 17.15a1.45 1.45 0 1 1 0 2.9a1.45 1.45 0 1 1 0-2.9z']
+  ];
+  // BUBBLE:END
   function questionBubble() {
     var ns = 'http://www.w3.org/2000/svg';
     var s = document.createElementNS(ns, 'svg');
@@ -430,13 +452,16 @@
     s.setAttribute('class', 'sfaf-qmark');
     s.setAttribute('aria-hidden', 'true');
     s.setAttribute('focusable', 'false');
-    [['sfaf-qmark-b', 'M2 2h28v21H13l-7 7v-7H2z'],
-     ['sfaf-qmark-q', 'M12.5 9.5a3.5 3.5 0 1 1 5.2 3.1c-1.1.6-1.7 1.3-1.7 2.6v.8'],
-     ['sfaf-qmark-d', 'M14.7 18.2h2.6v2.6h-2.6z']].forEach(function (p) {
+    BUBBLE.forEach(function (p) {
       var n = document.createElementNS(ns, 'path');
       n.setAttribute('class', p[0]);
       n.setAttribute('d', p[1]);
       s.appendChild(n);
+    });
+    // Once: when the load motion ends it is gone for good, even if the launcher is
+    // hidden and shown again (which would otherwise start it over).
+    s.addEventListener('animationend', function () {
+      s.classList.add('sfaf-qmark-done');
     });
     return s;
   }

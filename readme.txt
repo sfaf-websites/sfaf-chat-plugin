@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.18.0
+Stable tag: 1.19.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,28 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.19.0 =
+* Leadership questions ("Who is the CEO?", "Who runs SFAF?", "Who is the director of
+  X?") always get the Our Leadership page first, and blog posts are left out of them, so
+  an old announcement can't answer them. Board questions get the Board of Directors page
+  the same way. That page is now indexed: its address starts with "dev-" and it had been
+  skipped as a test page. The Board of Supervisors and the US President are not mistaken
+  for ours.
+* Questions about any other member of staff are not answered or looked up; the reply
+  points to the Main Office, 415-487-3000.
+* Job questions list our current openings as our own, linked to the Careers page. A
+  Greenhouse job board page added by hand is folded into the Careers page before the model
+  sees it, so Greenhouse is never named or linked.
+* Answers that give substance-use dosing or safer-use specifics start with "This is
+  general harm reduction information, not medical advice." (in Spanish when the answer
+  is). It is a label added to the answer, never a reason to hold anything back. General
+  health answers don't get it.
+* The chat panel and the Ask SFAF launcher have a soft layered drop shadow, so they lift
+  off the page. Phones, where the panel is full screen, have none.
+* The launcher's question bubble is a rounded speech bubble with a tail and a soft shadow,
+  and it moves once, gently, about a second after the page loads. Never with the system's
+  reduce-motion setting on.
 
 = 1.18.0 =
 * Notices at the top of the chat (closures, alerts) are a filled yellow block with dark

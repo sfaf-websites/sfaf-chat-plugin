@@ -71,7 +71,8 @@ class SFAF_Chat_Indexer {
                     '#/test-#',
                     '#/1080-2/#',
                     '#/marcom/#',
-                    '#/dev-board-of-directors/#',
+                    // Not /dev-board-of-directors/: despite the name it is the live Board
+                    // of Directors page (1.19.0), linked for board questions.
                     '#/resources/resource-title-goes-here/#',
                 ),
                 'types'   => array(
