@@ -157,12 +157,13 @@
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{fill:var(--sfaf-accent);stroke:var(--sfaf-dark);stroke-linejoin:round;}',
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-q{fill:none;stroke:var(--sfaf-dark);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;}',
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-d{fill:var(--sfaf-dark);stroke:none;}',
-    // BUBBLE:START variant A, "Soft": rounded corners, a short tail, one gentle bob.
-    '#sfaf-chat .sfaf-launcher .sfaf-qmark{filter:drop-shadow(0 1px 1px rgba(0,0,0,.28)) drop-shadow(0 4px 6px rgba(0,0,0,.22));',
-    '  animation:sfaf-q-bob 1.2s var(--sfaf-ease) .7s 1 both;}',
-    '#sfaf-chat .sfaf-launcher:hover .sfaf-qmark,#sfaf-chat .sfaf-launcher:focus-visible .sfaf-qmark{transform:translateY(-2px);}',
-    '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{stroke-width:2;}',
-    '@keyframes sfaf-q-bob{0%,55%,100%{transform:none;}30%{transform:translateY(-6px);}75%{transform:translateY(-2px);}}',
+    // BUBBLE:START variant C, "Tilted": rests at a slight tilt with a light glint, waves once.
+    '#sfaf-chat .sfaf-launcher .sfaf-qmark{filter:drop-shadow(0 1px 1px rgba(0,0,0,.28)) drop-shadow(0 4px 7px rgba(0,0,0,.22));',
+    '  transform-origin:30% 90%;transform:rotate(-8deg);animation:sfaf-q-wave .9s var(--sfaf-ease) .7s 1 both;}',
+    '#sfaf-chat .sfaf-launcher:hover .sfaf-qmark,#sfaf-chat .sfaf-launcher:focus-visible .sfaf-qmark{transform:rotate(-8deg) translateY(-2px);}',
+    '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{stroke-width:1.75;}',
+    '#sfaf-chat .sfaf-qmark .sfaf-qmark-g{fill:none;stroke:#fff;stroke-opacity:.75;stroke-width:1.6;stroke-linecap:round;}',
+    '@keyframes sfaf-q-wave{0%,100%{transform:rotate(-8deg);}25%{transform:rotate(7deg) translateY(-3px);}50%{transform:rotate(-14deg);}72%{transform:rotate(-4deg);}}',
     // BUBBLE:END
     '#sfaf-chat.sfaf-open .sfaf-launcher{display:none;}',
 
@@ -438,9 +439,10 @@
 
   // The launcher's bubble: a yellow speech bubble with a dark question mark. Its shape
   // and motion live between the BUBBLE markers here and in the CSS, and nowhere else.
-  // BUBBLE:START variant A, "Soft"
+  // BUBBLE:START variant C, "Tilted" (chosen 2026-11-17)
   var BUBBLE = [
-    ['sfaf-qmark-b', 'M8 2h16a6 6 0 0 1 6 6v9a6 6 0 0 1-6 6H14.5l-5.7 5.2c-.64.58-1.66.13-1.66-.73V23H8a6 6 0 0 1-6-6V8a6 6 0 0 1 6-6z'],
+    ['sfaf-qmark-b', 'M9 2h14a7 7 0 0 1 7 7v7a7 7 0 0 1-7 7H14.5l-5.7 5.2c-.64.58-1.66.13-1.66-.73V23H9a7 7 0 0 1-7-7V9a7 7 0 0 1 7-7z'],
+    ['sfaf-qmark-g', 'M6 11.5V9.5a3 3 0 0 1 3-3h2.5'],
     ['sfaf-qmark-q', 'M12.6 9.4a3.4 3.4 0 1 1 4.9 3.05c-1 .5-1.5 1.15-1.5 2.25v.6'],
     ['sfaf-qmark-d', 'M16 17.15a1.45 1.45 0 1 1 0 2.9a1.45 1.45 0 1 1 0-2.9z']
   ];

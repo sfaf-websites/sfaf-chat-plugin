@@ -51,9 +51,10 @@ use the Check for updates link in the plugin's row.
   health answers don't get it.
 * The chat panel and the Ask SFAF launcher have a soft layered drop shadow, so they lift
   off the page. Phones, where the panel is full screen, have none.
-* The launcher's question bubble is a rounded speech bubble with a tail and a soft shadow,
-  and it moves once, gently, about a second after the page loads. Never with the system's
-  reduce-motion setting on.
+* The launcher's question bubble is a rounded speech bubble with a tail, a soft shadow and
+  a small light glint, resting at a slight tilt. About a second after the page loads it
+  waves once (tips right, swings back, settles), and never again on that page. Never with
+  the system's reduce-motion setting on.
 
 = 1.18.0 =
 * Notices at the top of the chat (closures, alerts) are a filled yellow block with dark
