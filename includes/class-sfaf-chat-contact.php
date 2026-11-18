@@ -59,7 +59,7 @@ class SFAF_Chat_Contact {
     const MAX_DETAILS    = 1000;
     const MAX_MESSAGES   = 40;
     const MAX_MSG_CHARS  = 2000;
-    const MAX_ROUTES     = 30;
+    const MAX_ROUTES     = 50;
     const MAX_ABOUT      = 200;
     const MAX_RECIPIENTS = 10;
     const RATE_MAX       = 20;   // sends per ten minutes, site-wide
@@ -150,12 +150,15 @@ class SFAF_Chat_Contact {
         return 'Contact our ' . ( '' !== $phrase ? $phrase : 'team' );
     }
 
-    /** The teams the model may choose from: [{team, handles}]. */
+    /**
+     * The teams the model may choose from: [{team, handles}]. Since 1.22.0 a team
+     * with no recipients of its own is listed too; its requests go to the default.
+     */
     public static function teams_for_model() {
         $out = array();
         foreach ( (array) self::config()['routes'] as $r ) {
             $team = trim( (string) ( $r['team'] ?? '' ) );
-            if ( '' !== $team && array() !== self::recipients( (array) ( $r['emails'] ?? array() ) ) ) {
+            if ( '' !== $team ) {
                 $out[] = array( 'team' => $team, 'handles' => (string) ( $r['about'] ?? '' ) );
             }
         }
@@ -165,29 +168,34 @@ class SFAF_Chat_Contact {
     /**
      * Who gets a request: [team name, addresses, matched]. The team the model chose
      * (a name from the list, any case), else a team whose pages match, else the
-     * default. A team left with no usable address falls through to the default.
+     * default. A team with no usable address of its own (1.22.0: recipients are
+     * optional) keeps its name, so the button and the email still say which team,
+     * and its request goes to the default recipients.
      */
     public static function resolve( $model_team, $page ) {
-        $c      = self::config();
-        $routes = (array) $c['routes'];
-        $want   = strtolower( trim( (string) $model_team ) );
+        $c        = self::config();
+        $routes   = (array) $c['routes'];
+        $fallback = self::recipients( (array) $c['default_emails'] );
+        $want     = strtolower( trim( (string) $model_team ) );
         if ( '' !== $want ) {
             foreach ( $routes as $r ) {
-                $to = self::recipients( (array) ( $r['emails'] ?? array() ) );
-                if ( strtolower( trim( (string) ( $r['team'] ?? '' ) ) ) === $want && array() !== $to ) {
-                    return array( (string) $r['team'], $to, true );
+                if ( strtolower( trim( (string) ( $r['team'] ?? '' ) ) ) === $want ) {
+                    $to = self::recipients( (array) ( $r['emails'] ?? array() ) );
+                    return array( (string) $r['team'], array() !== $to ? $to : $fallback, true );
                 }
             }
         }
-        foreach ( $routes as $r ) {
-            $to = self::recipients( (array) ( $r['emails'] ?? array() ) );
-            foreach ( (array) ( $r['patterns'] ?? array() ) as $pattern ) {
-                if ( '' !== (string) $page && array() !== $to && SFAF_Chat_Starters::page_matches( (string) $pattern, (string) $page ) ) {
-                    return array( (string) ( $r['team'] ?? '' ), $to, '' !== trim( (string) ( $r['team'] ?? '' ) ) );
+        if ( '' !== (string) $page ) {
+            foreach ( $routes as $r ) {
+                foreach ( (array) ( $r['patterns'] ?? array() ) as $pattern ) {
+                    if ( SFAF_Chat_Starters::page_matches( (string) $pattern, (string) $page ) ) {
+                        $to = self::recipients( (array) ( $r['emails'] ?? array() ) );
+                        return array( (string) ( $r['team'] ?? '' ), array() !== $to ? $to : $fallback, '' !== trim( (string) ( $r['team'] ?? '' ) ) );
+                    }
                 }
             }
         }
-        return array( (string) $c['default_team'], self::recipients( (array) $c['default_emails'] ), false );
+        return array( (string) $c['default_team'], $fallback, false );
     }
 
     /** Usable recipients: valid, lower case, no repeats, and never the sending address. */

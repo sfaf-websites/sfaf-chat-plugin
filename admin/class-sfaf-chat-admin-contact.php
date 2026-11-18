@@ -3,7 +3,12 @@
  * The Contact screen: the "Contact our team" form's switch, its Postmark token,
  * Reply-To, the default recipients and the teams (name, what they handle, their
  * addresses, optional pages). One form; a save with any problem stores nothing
- * (the token included) and says what to fix.
+ * (the token included), says what to fix, and puts what was typed back on the
+ * screen (never the token).
+ *
+ * Teams (1.22.0): rows are added and removed in the browser (admin/js/admin.js), up
+ * to SFAF_Chat_Contact::MAX_ROUTES. A team needs only a name; recipients are
+ * optional, and a team without any sends to the default recipients.
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
@@ -12,7 +17,7 @@ class SFAF_Chat_Admin_Contact {
     const PAGE        = 'sfaf-chat-contact';
     const SAVE_ACTION = 'sfaf_chat_save_contact';
     const TEST_ACTION = 'sfaf_chat_test_contact';
-    const BLANK_ROWS  = 3;
+    const DRAFT       = 'sfaf_chat_contact_draft_';
 
     private $admin;
 
@@ -25,8 +30,8 @@ class SFAF_Chat_Admin_Contact {
         add_action( 'admin_post_' . self::TEST_ACTION, array( $this, 'test' ) );
     }
 
-    private function back() {
-        wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE ) );
+    private function back( $draft = false ) {
+        wp_safe_redirect( admin_url( 'admin.php?page=' . self::PAGE . ( $draft ? '&draft=1' : '' ) ) );
         exit;
     }
 
@@ -54,6 +59,7 @@ class SFAF_Chat_Admin_Contact {
         }
 
         $routes = array();
+        $typed  = array(); // the rows as typed, for the screen after a rejected save
         foreach ( (array) ( $post['routes'] ?? array() ) as $i => $row ) {
             $team     = trim( sanitize_text_field( (string) ( $row['team'] ?? '' ) ) );
             $about    = trim( sanitize_text_field( (string) ( $row['about'] ?? '' ) ) );
@@ -62,6 +68,12 @@ class SFAF_Chat_Admin_Contact {
             if ( '' === $team && '' === $about && array() === $patterns && array() === $emails && array() === $bad_row ) {
                 continue; // an empty row
             }
+            $typed[] = array(
+                'team'     => mb_substr( $team, 0, 60 ),
+                'about'    => mb_substr( $about, 0, SFAF_Chat_Contact::MAX_ABOUT ),
+                'patterns' => array_slice( $patterns, 0, 20 ),
+                'emails'   => array( mb_substr( trim( (string) ( $row['emails'] ?? '' ) ), 0, 2000 ) ),
+            );
             $n = count( $routes ) + 1;
             if ( '' === $team ) {
                 $errors[] = 'Team ' . $n . ': add the team\'s name.';
@@ -76,9 +88,6 @@ class SFAF_Chat_Admin_Contact {
                 if ( null !== $problem ) {
                     $errors[] = 'Team ' . $n . ': "' . $p . '" ' . $problem . '.';
                 }
-            }
-            if ( array() === $emails ) {
-                $errors[] = 'Team ' . $n . ': add at least one recipient.';
             }
             $routes[] = array( 'team' => mb_substr( $team, 0, 60 ), 'about' => mb_substr( $about, 0, SFAF_Chat_Contact::MAX_ABOUT ), 'patterns' => array_slice( $patterns, 0, 20 ), 'emails' => $emails );
         }
@@ -97,7 +106,15 @@ class SFAF_Chat_Admin_Contact {
         if ( array() !== $errors ) {
             array_unshift( $errors, 'Nothing was saved. Please fix these:' );
             $this->admin->stash_notice( $errors, 'error' );
-            $this->back();
+            set_transient( self::DRAFT . get_current_user_id(), array(
+                'enabled'        => $enabled,
+                'reply_to'       => $reply_to,
+                'reply_to_email' => mb_substr( $reply_to_email, 0, 200 ),
+                'default_team'   => mb_substr( trim( sanitize_text_field( (string) ( $post['default_team'] ?? '' ) ) ), 0, 60 ),
+                'default_emails' => array( mb_substr( trim( (string) ( $post['default_emails'] ?? '' ) ), 0, 2000 ) ),
+                'routes'         => $typed,
+            ), 5 * MINUTE_IN_SECONDS );
+            $this->back( true );
         }
 
         if ( '' !== $token ) {
@@ -126,14 +143,16 @@ class SFAF_Chat_Admin_Contact {
         $this->back();
     }
 
+    /** One team row. $i is a form index, or __i__ inside the blank template. */
     private function route_row( $i, array $r ) {
-        $base = 'routes[' . (int) $i . ']';
+        $base = 'routes[' . $i . ']';
         ?>
-        <tr>
+        <tr data-team>
             <td><input type="text" name="<?php echo esc_attr( $base ); ?>[team]" class="regular-text" placeholder="Stonewall Project" value="<?php echo esc_attr( (string) ( $r['team'] ?? '' ) ); ?>" aria-label="Team name"></td>
             <td><textarea name="<?php echo esc_attr( $base ); ?>[about]" rows="2" class="large-text" placeholder="Substance use counseling for queer men and trans people" aria-label="What they handle"><?php echo esc_textarea( (string) ( $r['about'] ?? '' ) ); ?></textarea></td>
-            <td><textarea name="<?php echo esc_attr( $base ); ?>[emails]" rows="2" class="large-text" spellcheck="false" aria-label="Recipients"><?php echo esc_textarea( implode( "\n", (array) ( $r['emails'] ?? array() ) ) ); ?></textarea></td>
+            <td><textarea name="<?php echo esc_attr( $base ); ?>[emails]" rows="2" class="large-text" spellcheck="false" placeholder="Default recipients" aria-label="Recipients (optional)"><?php echo esc_textarea( implode( "\n", (array) ( $r['emails'] ?? array() ) ) ); ?></textarea></td>
             <td><textarea name="<?php echo esc_attr( $base ); ?>[patterns]" rows="2" class="large-text code" spellcheck="false" placeholder="/support-services/the-stonewall-project/*" aria-label="Pages, one per line (optional)"><?php echo esc_textarea( implode( "\n", (array) ( $r['patterns'] ?? array() ) ) ); ?></textarea></td>
+            <td><button type="button" class="button-link button-link-delete" data-team-remove>Remove</button></td>
         </tr>
         <?php
     }
@@ -141,6 +160,13 @@ class SFAF_Chat_Admin_Contact {
     public function render() {
         $this->admin->gate();
         $c         = SFAF_Chat_Contact::config();
+        if ( ! empty( $_GET['draft'] ) ) {
+            $draft = get_transient( self::DRAFT . get_current_user_id() );
+            delete_transient( self::DRAFT . get_current_user_id() );
+            if ( is_array( $draft ) ) {
+                $c = array_merge( $c, $draft );
+            }
+        }
         $has_token = SFAF_Chat_Credentials::has( 'postmark_token' );
         ?>
         <div class="wrap sfaf-chat-admin">
@@ -185,21 +211,24 @@ class SFAF_Chat_Admin_Contact {
                 </table>
 
                 <h2>Teams</h2>
-                <p>The chat picks the team from what the question is about, not the page it was asked on: someone on the home page asking about the Stonewall Project goes to that team. It reads each team's name and <strong>What they handle</strong>, so say plainly what they cover. <strong>Pages</strong> are optional, a fallback when the chat names no team; write them as on the Suggested Questions screen (<code>/strut</code>, <code>/support-services/latine-health/*</code>). Anything else goes to the default recipients. The button reads "Contact our" and the team's name, with "team" added if it isn't there. Clear every box of a row to remove it.</p>
+                <p>The chat picks the team from what the question is about, not the page it was asked on: someone on the home page asking about the Stonewall Project goes to that team. It reads each team's name and <strong>What they handle</strong>, so say plainly what they cover. <strong>Recipients</strong> are optional: a team without any sends to the default recipients, so you can list every team now and add addresses later. <strong>Pages</strong> are optional, a fallback when the chat names no team; write them as on the Suggested Questions screen (<code>/strut</code>, <code>/support-services/latine-health/*</code>). Anything else goes to the default recipients. The button reads "Contact our" and the team's name, with "team" added if it isn't there. Add as many teams as you need, up to <?php echo (int) SFAF_Chat_Contact::MAX_ROUTES; ?>. Nothing changes until you save.</p>
                 <table class="widefat sfaf-chat-routes">
-                    <thead><tr><th scope="col">Team name</th><th scope="col">What they handle</th><th scope="col">Recipients</th><th scope="col">Pages (optional)</th></tr></thead>
-                    <tbody>
+                    <thead><tr><th scope="col">Team name</th><th scope="col">What they handle</th><th scope="col">Recipients (optional)</th><th scope="col">Pages (optional)</th><th scope="col"><span class="screen-reader-text">Remove</span></th></tr></thead>
+                    <tbody id="sfaf-chat-teams" data-max="<?php echo (int) SFAF_Chat_Contact::MAX_ROUTES; ?>">
                         <?php
                         $i = 0;
                         foreach ( (array) $c['routes'] as $r ) {
-                            $this->route_row( $i++, $r );
+                            $this->route_row( $i++, (array) $r );
                         }
-                        for ( $k = 0; $k < self::BLANK_ROWS; $k++ ) {
+                        if ( 0 === $i ) {
                             $this->route_row( $i++, array() );
                         }
                         ?>
                     </tbody>
                 </table>
+                <template id="sfaf-chat-team-template"><?php $this->route_row( '__i__', array() ); ?></template>
+                <p><button type="button" class="button" id="sfaf-chat-add-team">Add team</button> <span class="description" id="sfaf-chat-team-limit" hidden>That is the most teams the chat can take.</span></p>
+                <p class="screen-reader-text" id="sfaf-chat-team-status" role="status"></p>
                 <?php submit_button( 'Save contact settings' ); ?>
             </form>
 

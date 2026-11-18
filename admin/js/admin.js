@@ -218,6 +218,63 @@
     refreshButtons();
   }
 
+  /* ================================ TEAMS ================================= */
+
+  // Contact screen (1.22.0): add and remove team rows. Nothing changes until Save.
+  function initTeams() {
+    var body = document.getElementById('sfaf-chat-teams');
+    var template = document.getElementById('sfaf-chat-team-template');
+    var addBtn = document.getElementById('sfaf-chat-add-team');
+    var limit = document.getElementById('sfaf-chat-team-limit');
+    var status = document.getElementById('sfaf-chat-team-status');
+    if (!body || !template || !addBtn) return;
+
+    var max = parseInt(body.getAttribute('data-max'), 10) || 50;
+    // Form indexes only have to be unique: PHP keeps the order they arrive in.
+    var next = body.querySelectorAll('[data-team]').length;
+
+    function say(text) {
+      if (status) status.textContent = text;
+    }
+
+    function refresh() {
+      var full = body.querySelectorAll('[data-team]').length >= max;
+      addBtn.disabled = full;
+      if (limit) limit.hidden = !full;
+    }
+
+    function filled(row) {
+      return Array.prototype.some.call(row.querySelectorAll('input, textarea'), function (f) {
+        return f.value.trim() !== '';
+      });
+    }
+
+    body.addEventListener('click', function (e) {
+      var remove = e.target.closest && e.target.closest('[data-team-remove]');
+      if (!remove) return;
+      var row = remove.closest('[data-team]');
+      if (filled(row) && !window.confirm('Remove this team? It is gone once you save.')) return;
+      row.remove();
+      refresh();
+      addBtn.focus();
+      say('Team removed.');
+    });
+
+    addBtn.addEventListener('click', function () {
+      if (body.querySelectorAll('[data-team]').length >= max) return;
+      var holder = document.createElement('tbody');
+      holder.innerHTML = template.innerHTML.replace(/__i__/g, String(next++));
+      var row = holder.firstElementChild;
+      body.appendChild(row);
+      refresh();
+      row.querySelector('input').focus();
+      say('Team added.');
+    });
+
+    refresh();
+  }
+
   initAppearance();
   initQuestions();
+  initTeams();
 })();

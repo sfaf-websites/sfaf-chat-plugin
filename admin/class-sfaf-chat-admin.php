@@ -75,7 +75,7 @@ class SFAF_Chat_Admin {
         wp_enqueue_style( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/css/admin.css', array(), SFAF_CHAT_VERSION );
 
         $is_appearance = false !== strpos( (string) $hook, SFAF_Chat_Admin_Appearance::PAGE );
-        if ( $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) ) {
+        if ( $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Contact::PAGE ) ) {
             wp_enqueue_script( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/js/admin.js', array(), SFAF_CHAT_VERSION, true );
             wp_add_inline_script( 'sfaf-chat-admin', 'window.sfafChatAdmin=' . wp_json_encode( array( 'pairs' => SFAF_Chat_Appearance::PAIRS ) ) . ';', 'before' );
         }

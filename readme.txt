@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.21.0
+Stable tag: 1.22.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,18 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.22.0 =
+* Contact screen: teams are no longer a fixed set of rows. "Add team" adds a row (up to 50
+  teams) and "Remove" takes one off; nothing changes until you save. Saved teams are kept.
+* A team can be saved with just its name and what it handles, with no recipient yet. Its
+  requests go to the default recipients, still under the team's name, so the full list of
+  teams can be built now and addresses added later. websites@sfaf.org is still refused as
+  a recipient, and the form still needs a valid default recipient to be offered.
+* A save the screen refuses now puts what you typed back on the screen (never the Postmark
+  token), so a typo doesn't cost the whole list.
+* The visitor's contact form needs a name and an email, as before, now with more tests
+  behind it on both sides. Phone and additional details stay optional.
 
 = 1.21.0 =
 * Message bubbles have a small tail, so they read as speech: on the left for the chat's
