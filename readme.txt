@@ -34,9 +34,9 @@ use the Check for updates link in the plugin's row.
 == Changelog ==
 
 = 1.20.0 =
-* Giving and signing up (donating, events, Cycle to Zero and other rides, fundraising
-  events): a direct, ready-to-act question ("How do I donate?") gets the link or the
-  Donate button and no contact box. Someone who shows interest and has an open question
+* Giving, signing up and volunteering (donating, events, Cycle to Zero and other rides,
+  fundraising events, volunteering): a direct, ready-to-act question ("How do I donate?",
+  "How do I volunteer?") gets the link or the Donate button and no contact box. Someone who shows interest and has an open question
   (considering it, unsure, asking where the money goes) is offered the contact box so they
   can reach a person, beside the link. The existing reasons to offer it are unchanged.
 * Email addresses, web addresses and phone numbers in a reply are working links: emails

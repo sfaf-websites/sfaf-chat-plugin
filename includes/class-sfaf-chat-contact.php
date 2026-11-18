@@ -97,8 +97,8 @@ class SFAF_Chat_Contact {
         'on_warm_lead'            => true,
     );
 
-    /** Fund-generating and sign-up topics, where a warm lead is offered a person (1.20.0). */
-    const CTA_TOPICS = array( 'donate', 'events' );
+    /** Giving, sign-up and volunteering topics, where a warm lead is offered a person (1.20.0). */
+    const CTA_TOPICS = array( 'donate', 'events', 'volunteer' );
 
     /** A phone number (415-487-3000, (415) 487-3000, 415.487.3000) or an email address. */
     const DIRECT_CONTACT = '/(?:\(\d{3}\)\s*|\b\d{3}[\s.\-])\d{3}[\s.\-]\d{4}\b|[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}/i';
