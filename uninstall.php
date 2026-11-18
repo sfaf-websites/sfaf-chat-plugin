@@ -26,6 +26,7 @@ foreach ( array(
     'sfaf_chat_index_state',
     'sfaf_chat_alerts',
     'sfaf_chat_extra_urls',
+    'sfaf_chat_link_domains',
     'sfaf_chat_contact',
     'sfaf_chat_installed_version',
 ) as $sfaf_chat_option ) {

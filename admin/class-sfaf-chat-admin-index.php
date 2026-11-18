@@ -1,7 +1,8 @@
 <?php
 /**
  * The Indexing screen: what the indexer crawls, how the last run went per site,
- * and the pages added by hand (SFAF_Chat_Extra_Urls).
+ * the pages added by hand (SFAF_Chat_Extra_Urls), and (1.21.0) the approved link
+ * domains (SFAF_Chat_Link_Domains): which web addresses in a reply are clickable.
  *
  * The external scheduler still drives the crawl. The one button that fetches
  * here is "Fetch these pages now", for the hand-added pages only, so a new
@@ -15,6 +16,7 @@ class SFAF_Chat_Admin_Index {
     const SAVE_ACTION  = 'sfaf_chat_save_extra_urls';
     const FETCH_ACTION = 'sfaf_chat_fetch_extra_urls';
     const RETRY_ACTION = 'sfaf_chat_retry_extra_url';
+    const LINKS_ACTION = 'sfaf_chat_save_link_domains';
 
     private $admin;
 
@@ -26,6 +28,7 @@ class SFAF_Chat_Admin_Index {
         add_action( 'admin_post_' . self::SAVE_ACTION, array( $this, 'save' ) );
         add_action( 'admin_post_' . self::FETCH_ACTION, array( $this, 'fetch' ) );
         add_action( 'admin_post_' . self::RETRY_ACTION, array( $this, 'retry' ) );
+        add_action( 'admin_post_' . self::LINKS_ACTION, array( $this, 'save_links' ) );
     }
 
     private function back() {
@@ -43,6 +46,23 @@ class SFAF_Chat_Admin_Index {
             $msgs[] = 'Not added (needs a full https:// address): ' . $bad;
         }
         $this->admin->stash_notice( $msgs, $rejected ? 'warning' : 'success' );
+        $this->back();
+    }
+
+    public function save_links() {
+        $this->admin->gate();
+        check_admin_referer( self::LINKS_ACTION );
+        $lines = preg_split( '/\r\n|\r|\n/', (string) wp_unslash( $_POST['domains'] ?? '' ) );
+        list( $count, $rejected ) = SFAF_Chat_Link_Domains::set_list( (array) $lines );
+        if ( $rejected ) {
+            $msgs = array( 'Nothing was saved. Fix these lines and save again:' );
+            foreach ( $rejected as $bad ) {
+                $msgs[] = $bad;
+            }
+            $this->admin->stash_notice( $msgs, 'error' );
+        } else {
+            $this->admin->stash_notice( array( sprintf( '%d domain%s saved. Open chats pick this up within 5 minutes.', $count, 1 === $count ? '' : 's' ) ), 'success' );
+        }
         $this->back();
     }
 
@@ -180,6 +200,24 @@ class SFAF_Chat_Admin_Index {
                 </table>
                 <p><?php $form( self::FETCH_ACTION, 'Fetch these pages now', 'button button-secondary' ); ?></p>
             <?php endif; ?>
+
+            <h2 id="sfaf-chat-links">Approved link domains</h2>
+            <p>A web address in a reply is a clickable link only when it is on one of these domains (or a subdomain of one), on a site listed above, on a page added by hand, or on the booking service built into the chat. Any other address stays plain text, so a made-up or unknown address is never one click away. Email addresses and phone numbers are always linked.</p>
+            <p>One domain per line. To give a site other than sfaf.org a friendly name, add it after a bar: <code>san-francisco-aids-foundation.myshopify.com | SFAF Shop</code>. The name then replaces the raw domain on link buttons to that site. If any line isn't a domain, nothing is saved.</p>
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                <input type="hidden" name="action" value="<?php echo esc_attr( self::LINKS_ACTION ); ?>">
+                <?php wp_nonce_field( self::LINKS_ACTION ); ?>
+                <label for="sfaf-chat-link-domains" class="screen-reader-text">Approved link domains, one per line</label>
+                <textarea id="sfaf-chat-link-domains" name="domains" rows="8" class="large-text code" spellcheck="false"><?php
+                    $rows = array();
+                    foreach ( SFAF_Chat_Link_Domains::all() as $domain => $label ) {
+                        $rows[] = '' !== $label ? $domain . ' | ' . $label : $domain;
+                    }
+                    echo esc_textarea( implode( "\n", $rows ) );
+                ?></textarea>
+                <?php submit_button( 'Save domains', 'primary', 'submit', false ); ?>
+            </form>
+            <p class="description">Linked right now (approved, indexed and built in): <?php echo esc_html( implode( ', ', SFAF_Chat_Link_Domains::linkable_hosts() ) ); ?>.</p>
         </div>
         <?php
     }

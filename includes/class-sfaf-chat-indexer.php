@@ -122,6 +122,12 @@ class SFAF_Chat_Indexer {
                 return (string) $site['name'];
             }
         }
+        // A friendly label from the approved link domains ("SFAF Shop"), else the host.
+        $label = class_exists( 'SFAF_Chat_Link_Domains' ) && ! self::is_own( $source )
+            ? SFAF_Chat_Link_Domains::label_for( (string) $source ) : '';
+        if ( '' !== $label ) {
+            return $label;
+        }
         return self::is_own( $source ) ? 'SFAF' : (string) $source;
     }
 

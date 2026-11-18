@@ -38,6 +38,9 @@ class SFAF_Chat_Widget {
             'proxy'    => self::ask_url(),
             'theme'    => SFAF_Chat_Appearance::theme(),
             'greeting' => SFAF_Chat_Settings::welcome(),
+            // Hosts whose web addresses in a reply may be links (1.21.0). Any other
+            // address stays plain text. See SFAF_Chat_Link_Domains.
+            'links'    => SFAF_Chat_Link_Domains::linkable_hosts(),
         );
     }
 

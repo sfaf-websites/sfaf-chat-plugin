@@ -1282,6 +1282,11 @@ class SFAF_Chat_Endpoint {
         $label = SFAF_Chat_Core::no_em_dash( $r['title'] ?? $r['id'] );
         if ( 'post' === ( $r['type'] ?? '' ) ) {
             $label = self::POST_KIND . ': ' . $label;
+        } elseif ( isset( $r['source'] ) && 'event' !== ( $r['type'] ?? '' ) && ! SFAF_Chat_Indexer::is_own( $r['source'] )
+            && '' !== ( $friendly = SFAF_Chat_Link_Domains::label_for( (string) wp_parse_url( (string) ( $r['url'] ?? '' ), PHP_URL_HOST ) ) ) ) {
+            // An SFAF property on another domain with a friendly label (1.21.0): the
+            // button says just that ("SFAF Shop"), never the raw host.
+            $label = $friendly;
         } elseif ( isset( $r['source'] ) && 'event' !== ( $r['type'] ?? '' ) && ! SFAF_Chat_Indexer::is_own( $r['source'] ) ) {
             // Another site says so on the button: "Cycle to Zero: Registration", unless
             // the title already starts with the site's name.

@@ -101,6 +101,17 @@
     // the full red only on its edge, so it reads as a caution without alarm.
     '  --sfaf-caution-bg:#FDE9E7;',
     '  --sfaf-caution-edge:#F04937;',
+    // The contact form's "sent" message (1.21.0): a soft tint of the brand green #8CC745,
+    // the full green only on its border and check.
+    '  --sfaf-success-bg:#F1F8E9;',
+    '  --sfaf-success-edge:#8CC745;',
+    // Action buttons at rest (1.21.0): the same shadow family as the launcher and panel,
+    // so they read as buttons without a hover (phones have none).
+    '  --sfaf-btn-shadow:0 1px 2px rgba(0,0,0,.14),0 4px 12px rgba(0,0,0,.16);',
+    // Hover swaps (1.21.0): 25% slower than before (.45s to .56s, .6s to .75s, .16s to .2s).
+    '  --sfaf-swap:.56s;',
+    '  --sfaf-glide:.75s;',
+    '  --sfaf-quick:.2s;',
     '  --sfaf-focus:#373433;',
     '  --sfaf-focus-on-dark:#FFD900;',
     '  --sfaf-bot-bg:#ffffff;',
@@ -146,7 +157,7 @@
     // and out, where it can be seen.
     '  box-shadow:inset 0 0 0 1px var(--sfaf-accent),0 0 0 1px rgba(255,255,255,.4),0 2px 12px rgba(0,0,0,.28),',
     '    0 -4px 14px rgba(0,0,0,.16),0 8px 28px rgba(0,0,0,.18);',
-    '  transition:background .16s ease;}',
+    '  transition:background var(--sfaf-quick) ease;}',
     '#sfaf-chat .sfaf-launcher:hover{background:var(--sfaf-dark-hover);}',
     // Inset, because the page behind may be white and the bottom edge would clip it.
     '#sfaf-chat .sfaf-launcher:focus-visible{outline:2px solid var(--sfaf-focus-on-dark);outline-offset:-4px;}',
@@ -193,7 +204,7 @@
     '#sfaf-chat .sfaf-header button{display:inline-flex;align-items:center;gap:7px;height:36px;cursor:pointer;',
     '  border-radius:var(--sfaf-radius);',
     '  background:transparent;color:var(--sfaf-on-dark);border:1px solid transparent;font-size:13px;font-weight:500;',
-    '  transition:background .16s ease,color .16s ease,border-color .16s ease;}',
+    '  transition:background var(--sfaf-quick) ease,color var(--sfaf-quick) ease,border-color var(--sfaf-quick) ease;}',
     '#sfaf-chat .sfaf-header button:hover{background:var(--sfaf-dark-hover);}',
     '#sfaf-chat .sfaf-header button:focus-visible{outline-color:var(--sfaf-focus-on-dark);outline-offset:0;}',
     '#sfaf-chat .sfaf-header svg{width:18px;height:18px;flex:none;}',
@@ -226,8 +237,33 @@
     '  border:1px solid var(--sfaf-border);}',
     '#sfaf-chat .sfaf-user{align-self:flex-end;background:var(--sfaf-user-bg);color:var(--sfaf-user-text);}',
     '#sfaf-chat .sfaf-user::selection{background:var(--sfaf-surface);color:var(--sfaf-text);}',
+    /*
+     * Tails (1.21.0): a small notch off the bottom edge, so a bubble reads as speech.
+     * The chat's on the left, the visitor's on the right; the corners stay square, and
+     * starters, notes, alerts and cards have none. The chat's bubble has a border, so its
+     * tail is two triangles: the border color, then the fill 1px inside it. A bubble with
+     * other colors (error, sent) sets --sfaf-tail-fill and --sfaf-tail-edge.
+     */
+    '#sfaf-chat .sfaf-msg{position:relative;}',
+    '#sfaf-chat .sfaf-bot::before,#sfaf-chat .sfaf-bot::after,#sfaf-chat .sfaf-user::after{content:"";position:absolute;',
+    '  width:0;height:0;border-style:solid;pointer-events:none;}',
+    '#sfaf-chat .sfaf-bot::before{left:-10px;bottom:9px;border-width:6px 10px 6px 0;',
+    '  border-color:transparent var(--sfaf-tail-edge,var(--sfaf-border)) transparent transparent;}',
+    '#sfaf-chat .sfaf-bot::after{left:-8px;bottom:10px;border-width:5px 9px 5px 0;',
+    '  border-color:transparent var(--sfaf-tail-fill,var(--sfaf-bot-bg)) transparent transparent;}',
+    '#sfaf-chat .sfaf-user::after{right:-9px;bottom:9px;border-width:6px 0 6px 9px;',
+    '  border-color:transparent transparent transparent var(--sfaf-user-bg);}',
     // A fixed pair, so the error stays readable whatever the bubble colors are.
-    '#sfaf-chat .sfaf-error{background:var(--sfaf-error-bg);border-color:var(--sfaf-error-border);color:#373433;}',
+    '#sfaf-chat .sfaf-error{background:var(--sfaf-error-bg);border-color:var(--sfaf-error-border);color:#373433;',
+    '  --sfaf-tail-fill:var(--sfaf-error-bg);--sfaf-tail-edge:var(--sfaf-error-border);}',
+    // The contact form went: a success state, distinct from any other bubble (1.21.0).
+    '#sfaf-chat .sfaf-success{background:var(--sfaf-success-bg);border-color:var(--sfaf-success-edge);color:#373433;',
+    '  display:flex;align-items:flex-start;gap:10px;',
+    '  --sfaf-tail-fill:var(--sfaf-success-bg);--sfaf-tail-edge:var(--sfaf-success-edge);}',
+    '#sfaf-chat .sfaf-success-icon{flex:none;width:20px;height:20px;margin-top:1px;}',
+    '#sfaf-chat .sfaf-success-icon .sfaf-success-disc{fill:var(--sfaf-success-edge);stroke:none;}',
+    '#sfaf-chat .sfaf-success-icon .sfaf-success-tick{fill:none;stroke:#373433;stroke-width:2.4;}',
+    '#sfaf-chat .sfaf-success-text{min-width:0;}',
     '#sfaf-chat .sfaf-msg a.sfaf-tel{color:inherit;text-decoration:underline;',
     '  text-underline-offset:2px;font-weight:600;}',
     '#sfaf-chat a.sfaf-tel{white-space:nowrap;}',
@@ -246,21 +282,27 @@
     '  --sfaf-flow-fill:var(--sfaf-dark);--sfaf-flow-ink-on:var(--sfaf-accent);',
     '  position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;',
     '  min-height:48px;padding:16px 56px 16px 24px;border:0;border-radius:var(--sfaf-radius);cursor:pointer;',
-    '  background:var(--sfaf-flow-bg);color:var(--sfaf-flow-ink);box-shadow:none;text-decoration:none;text-align:left;',
+    '  background:var(--sfaf-flow-bg);color:var(--sfaf-flow-ink);box-shadow:var(--sfaf-btn-shadow);text-decoration:none;text-align:left;',
     '  font-family:var(--sfaf-font);font-weight:700;font-size:16px;line-height:16px;letter-spacing:.8px;',
-    '  text-transform:uppercase;transition:color .45s ease;}',
+    '  text-transform:uppercase;transition:color var(--sfaf-swap) ease;}',
     '#sfaf-chat .sfaf-flow-dark{--sfaf-flow-bg:var(--sfaf-dark);--sfaf-flow-ink:var(--sfaf-on-dark);',
     '  --sfaf-flow-fill:var(--sfaf-accent);--sfaf-flow-ink-on:var(--sfaf-on-accent);}',
     '#sfaf-chat .sfaf-flow-disc{position:absolute;left:50%;top:50%;z-index:-1;width:24px;height:24px;',
     '  margin:-12px 0 0 -12px;border-radius:50%;background:var(--sfaf-flow-fill);transform:scale(0);',
-    '  transition:transform .6s cubic-bezier(.23,1,.32,1);pointer-events:none;}',
+    '  transition:transform var(--sfaf-glide) cubic-bezier(.23,1,.32,1);pointer-events:none;}',
     // inherit: the reset above sets letter-spacing and text-transform on every element.
     '#sfaf-chat .sfaf-flow-text{position:relative;letter-spacing:inherit;text-transform:inherit;',
-    '  transition:transform .6s cubic-bezier(.23,1,.32,1);}',
-    '#sfaf-chat .sfaf-flow .sfaf-flow-a{position:absolute;top:50%;width:16px;height:16px;margin-top:-8px;',
-    '  transition:left .6s cubic-bezier(.23,1,.32,1),right .6s cubic-bezier(.23,1,.32,1);}',
+    '  transition:transform var(--sfaf-glide) cubic-bezier(.23,1,.32,1);}',
+    // The arrow sits in a small round badge (1.21.0) in the text color, the arrow in the
+    // button color, so the button says "go" at rest. The badge swaps with the button.
+    '#sfaf-chat .sfaf-flow .sfaf-flow-a{position:absolute;top:50%;width:26px;height:26px;margin-top:-13px;padding:5px;',
+    '  border-radius:50%;background:var(--sfaf-flow-ink);color:var(--sfaf-flow-bg);stroke-width:2.4;',
+    '  transition:left var(--sfaf-glide) cubic-bezier(.23,1,.32,1),right var(--sfaf-glide) cubic-bezier(.23,1,.32,1),',
+    '    background var(--sfaf-swap) ease,color var(--sfaf-swap) ease;}',
     '#sfaf-chat .sfaf-flow .sfaf-flow-in{left:-25%;}',
-    '#sfaf-chat .sfaf-flow .sfaf-flow-out{right:24px;}',
+    '#sfaf-chat .sfaf-flow .sfaf-flow-out{right:18px;}',
+    '#sfaf-chat .sfaf-flow:not([disabled]):hover .sfaf-flow-a,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible .sfaf-flow-a{',
+    '  background:var(--sfaf-flow-ink-on);color:var(--sfaf-flow-fill);}',
     '#sfaf-chat .sfaf-flow:not([disabled]):hover,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible{color:var(--sfaf-flow-ink-on);}',
     '#sfaf-chat .sfaf-flow:not([disabled]):hover .sfaf-flow-disc,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible .sfaf-flow-disc{transform:scale(32);}',
     '#sfaf-chat .sfaf-flow:not([disabled]):hover .sfaf-flow-text,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible .sfaf-flow-text{transform:translateX(32px);}',
@@ -289,7 +331,7 @@
     '  text-align:left;cursor:pointer;background:transparent;color:var(--sfaf-text);',
     '  border:1px solid var(--sfaf-border);border-radius:var(--sfaf-radius);padding:10px 14px;font-size:14.5px;line-height:1.4;',
     '  animation:sfaf-rise .34s var(--sfaf-ease) both;',
-    '  transition:background .16s ease,border-color .16s ease;}',
+    '  transition:background var(--sfaf-quick) ease,border-color var(--sfaf-quick) ease;}',
     '#sfaf-chat .sfaf-starter:nth-child(2){animation-delay:.05s;}',
     '#sfaf-chat .sfaf-starter:nth-child(3){animation-delay:.1s;}',
     '#sfaf-chat .sfaf-starter:hover{background:var(--sfaf-surface);border-color:var(--sfaf-dark);}',
@@ -360,7 +402,7 @@
     '#sfaf-chat .sfaf-input:hover{border-color:#8f8c89;}',
     '#sfaf-chat .sfaf-input:focus{border-color:var(--sfaf-dark);outline:1px solid var(--sfaf-dark);outline-offset:-2px;}',
     '#sfaf-chat .sfaf-mic,#sfaf-chat .sfaf-send{flex:none;width:44px;height:44px;cursor:pointer;border-radius:var(--sfaf-radius);',
-    '  display:flex;align-items:center;justify-content:center;transition:background .16s ease,color .16s ease,border-color .16s ease;}',
+    '  display:flex;align-items:center;justify-content:center;transition:background var(--sfaf-quick) ease,color var(--sfaf-quick) ease,border-color var(--sfaf-quick) ease;}',
     '#sfaf-chat .sfaf-mic svg,#sfaf-chat .sfaf-send svg{width:20px;height:20px;}',
     '#sfaf-chat .sfaf-mic{background:var(--sfaf-surface);color:var(--sfaf-text);border:1px solid var(--sfaf-border);}',
     '#sfaf-chat .sfaf-mic:hover{border-color:var(--sfaf-dark);}',
@@ -674,10 +716,12 @@
   /*
    * AUTO-LINKS (1.20.0). In a reply's text, these become working links:
    *   an email address            mailto:, any address
-   *   a web address               only on our own sites (OUR_HOST_RE), opened in a new
-   *                               tab, always https. Any other address stays plain text,
-   *                               so a model reply can never put a link to an outside or
-   *                               made-up site in front of a visitor.
+   *   a web address               only on an allowed host or a subdomain of one
+   *                               (1.21.0: CONFIG.links, from the plugin: the approved
+   *                               link domains, the indexed sites, healow), opened in a
+   *                               new tab, always https. Any other address stays plain
+   *                               text, so a model reply can never put a link to an
+   *                               unknown or made-up site in front of a visitor.
    *   a US phone number           tel:+1...
    *   988 or 911                  tel:, only beside "call", "text", "dial" (or Spanish),
    *                               "988 Suicide & Crisis Lifeline" or "911 in an emergency",
@@ -686,20 +730,30 @@
    */
   var LINK_RE = new RegExp([
     '([A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,})',
-    '((?:https?:\\/\\/|www\\.)[^\\s<>"\'()\\[\\]]+|\\b(?:[A-Za-z0-9-]+\\.)+(?:org|com|net)\\b(?:\\/[^\\s<>"\'()\\[\\]]*)?)',
+    '((?:https?:\\/\\/|www\\.)[^\\s<>"\'()\\[\\]]+|\\b(?:[A-Za-z0-9-]+\\.)+(?:org|com|net|io)\\b(?:\\/[^\\s<>"\'()\\[\\]]*)?)',
     '(\\(?\\d{3}\\)?[\\s.-]\\d{3}[\\s.-]\\d{4})',
     '\\b(988|911)\\b'
   ].join('|'), 'g');
-  var OUR_HOST_RE = /(^|\.)(sfaf\.org|tweaker\.org|cycletozero\.org)$/i;
+  // Without a list from the plugin, our own three sites only.
+  var LINK_HOSTS = (Array.isArray(CONFIG.links) && CONFIG.links.length ? CONFIG.links :
+    ['sfaf.org', 'tweaker.org', 'cycletozero.org']).map(function (h) { return String(h).toLowerCase(); });
+  function allowedHost(host) {
+    host = String(host).toLowerCase().replace(/\.$/, '');
+    for (var i = 0; i < LINK_HOSTS.length; i++) {
+      var d = LINK_HOSTS[i];
+      if (host === d || host.slice(-(d.length + 1)) === '.' + d) return true;
+    }
+    return false;
+  }
   var SHORT_BEFORE_RE = /\b(call|text|dial|llam[ae]|llamar|marc[ae]|marcar|env[ií]a|mensaje)\b[^.\n]{0,12}$/i;
   var SHORT_AFTER_RE = /^\s*(suicide|crisis|lifeline|l[ií]nea|in an emergency|en (caso de )?(una )?emergencia)/i;
 
-  // An address on our own sites, as an https URL; null for anything else.
+  // An address on an allowed host, as an https URL; null for anything else.
   function ourUrl(raw) {
     var u = /^https?:\/\//i.test(raw) ? raw.replace(/^http:/i, 'https:') : 'https://' + raw;
     try {
       var p = new URL(u);
-      return OUR_HOST_RE.test(p.hostname) ? p.href : null;
+      return allowedHost(p.hostname) ? p.href : null;
     } catch (e) {
       return null;
     }
@@ -1243,7 +1297,16 @@
           }
           form.remove();
           contactEl = null;
-          addBubble('bot', typeof data.message === 'string' ? data.message : 'Thanks. Someone will reach out soon.');
+          // A success state with a check (1.21.0), not an ordinary reply.
+          var done = addBubble('bot', typeof data.message === 'string' ? data.message : 'Thanks. Someone will reach out soon.', 'sfaf-success');
+          var doneText = el('div', 'sfaf-success-text');
+          while (done.firstChild) doneText.appendChild(done.firstChild);
+          var tick = svg(['M12 2a10 10 0 1 1 0 20a10 10 0 1 1 0-20z', 'M7.5 12.5l3 3 6-6.5']);
+          tick.setAttribute('class', 'sfaf-success-icon');
+          tick.firstChild.setAttribute('class', 'sfaf-success-disc');
+          tick.lastChild.setAttribute('class', 'sfaf-success-tick');
+          done.appendChild(tick);
+          done.appendChild(doneText);
           focusComposer();
         })
         .catch(function () {

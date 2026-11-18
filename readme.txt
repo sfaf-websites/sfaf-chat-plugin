@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.20.0
+Stable tag: 1.21.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,24 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.21.0 =
+* Message bubbles have a small tail, so they read as speech: on the left for the chat's
+  messages (the welcome and every answer), on the right for the visitor's questions.
+  Corners stay square. Suggested questions have none.
+* After the contact form is sent, the confirmation is a success state: a light green
+  tint of the brand green, a green border and a check mark.
+* Action buttons (page links, Donate, Make an appointment, card buttons, Contact our team,
+  Send) read as buttons before they are touched: a soft drop shadow, and the arrow in a
+  small round badge. Their hover swap is about 25% slower, and so are the hovers on the
+  launcher, the header buttons, suggested questions and the send button.
+* Approved link domains, on the Indexing screen: a web address in a reply is a link only
+  on one of these domains, on a site the chat indexes, on a page added by hand, or on the
+  booking service. Seeded with sfaf.org, tweaker.org, cycletozero.org, the SFAF Shop on
+  Shopify, Greenhouse jobs, donate.sfaf.org and annualreport.sfaf.org. Any other address
+  stays plain text. Emails and phone numbers are linked as before.
+* A domain on that list can carry a friendly name. The Shopify shop is "SFAF Shop", so a
+  link to it says "SFAF Shop" rather than the raw Shopify address.
 
 = 1.20.0 =
 * Giving, signing up and volunteering (donating, events, Cycle to Zero and other rides,
