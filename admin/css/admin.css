@@ -151,3 +151,76 @@
   .sfaf-chat-dash .xaxis span:nth-child(odd) { visibility: hidden; }
   .sfaf-chat-dash .hbars { grid-template-columns: minmax(90px, max-content) 1fr; }
 }
+
+/* ================================ REPORT (1.23.0) ================================
+   Shown in team meetings and saved as PDF, so it is laid out like a page: SFAF
+   yellow #FFD900 on #373433, brand green #8CC745 for actions, brand red #F04937 for
+   gaps. Bars are HTML, so they print exactly. */
+.sfaf-report-wrap { --r-ink: #373433; --r-yellow: #FFD900; --r-green: #8CC745; --r-red: #F04937; --r-line: #e4e2e0; --r-muted: #6b6765; }
+.sfaf-report-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin: 16px 0; max-width: 980px; }
+.sfaf-report-controls label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.sfaf-report-controls select, .sfaf-report-controls input[type="date"] { font-weight: 400; min-height: 32px; }
+.sfaf-report-presets { display: flex; gap: 12px; align-items: center; min-height: 32px; }
+.sfaf-report-print { margin-left: auto !important; }
+
+.sfaf-report { background: #fff; color: var(--r-ink); max-width: 980px; padding: 36px 40px 28px; border: 1px solid var(--r-line); box-sizing: border-box; }
+.sfaf-report-head { border-bottom: 6px solid var(--r-yellow); padding-bottom: 14px; margin-bottom: 24px; }
+.sfaf-report-kicker { margin: 0; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; font-weight: 700; color: var(--r-muted); }
+.sfaf-report-head h2 { margin: 4px 0 2px; font-size: 28px; line-height: 1.2; color: var(--r-ink); }
+.sfaf-report-range { margin: 0; font-size: 15px; color: var(--r-muted); }
+
+.sfaf-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 8px; }
+.sfaf-tile { background: var(--r-ink); color: #fff; padding: 14px 16px; border-top: 4px solid var(--r-yellow); }
+.sfaf-tile-gap { border-top-color: var(--r-red); }
+.sfaf-tile-action { border-top-color: var(--r-green); }
+.sfaf-tile-n { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; }
+.sfaf-tile-l { display: block; font-size: 13px; margin-top: 4px; opacity: .9; }
+
+.sfaf-report-section { margin-top: 30px; break-inside: avoid; page-break-inside: avoid; }
+.sfaf-report-section h3 { font-size: 19px; margin: 0 0 4px; color: var(--r-ink); }
+.sfaf-report-section h4 { font-size: 14px; margin: 18px 0 8px; color: var(--r-ink); }
+.sfaf-report-lead { margin: 0 0 12px; color: var(--r-muted); }
+.sfaf-report-note { font-size: 12.5px; color: var(--r-muted); margin: 10px 0 0; }
+.sfaf-report-empty { color: var(--r-muted); font-style: italic; margin: 6px 0; }
+
+.sfaf-bars { list-style: none; margin: 0; padding: 0; }
+.sfaf-bars li { display: grid; grid-template-columns: minmax(140px, 32%) 1fr 56px; gap: 12px; align-items: center; margin: 0 0 7px; }
+.sfaf-bar-label { font-size: 13.5px; overflow-wrap: anywhere; }
+.sfaf-bar-track { background: #f3f2f1; height: 18px; display: block; }
+.sfaf-bar { display: block; height: 100%; background: var(--r-yellow); box-shadow: inset 0 0 0 1px rgba(55, 52, 51, .18); }
+.sfaf-bars-gap .sfaf-bar { background: var(--r-red); box-shadow: none; }
+.sfaf-bars-action .sfaf-bar { background: var(--r-green); box-shadow: none; }
+.sfaf-bar-n { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+
+.sfaf-conv { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.sfaf-conv th, .sfaf-conv td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--r-line); }
+.sfaf-conv thead th { border-bottom: 2px solid var(--r-ink); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.sfaf-conv td { font-variant-numeric: tabular-nums; }
+.sfaf-rate { display: inline-block; width: 80px; height: 8px; background: #f3f2f1; margin-right: 8px; vertical-align: middle; }
+.sfaf-rate span { display: block; height: 100%; background: var(--r-green); }
+
+.sfaf-report-foot { margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--r-line); font-size: 12px; color: var(--r-muted); }
+
+.sfaf-report-admin { max-width: 980px; margin-top: 36px; padding-top: 8px; border-top: 1px solid #c3c4c7; }
+.sfaf-report-admin h2 { margin-top: 24px; }
+
+@media (max-width: 782px) {
+  .sfaf-report { padding: 22px 16px; }
+  .sfaf-tiles { grid-template-columns: repeat(2, 1fr); }
+  .sfaf-bars li { grid-template-columns: minmax(100px, 40%) 1fr 44px; }
+  .sfaf-report-print { margin-left: 0 !important; }
+}
+
+/* Print / Save as PDF: the report alone, on white, with its colors. */
+@media print {
+  @page { margin: 14mm 12mm; }
+  html, body, #wpwrap, #wpcontent, #wpbody, #wpbody-content { background: #fff !important; }
+  #adminmenumain, #adminmenuback, #adminmenuwrap, #wpadminbar, #wpfooter, #screen-meta, #screen-meta-links,
+  .sfaf-chat-tabs, .notice, .update-nag, .sfaf-report-controls, .sfaf-report-admin, .sfaf-report-screen-title { display: none !important; }
+  #wpcontent, #wpbody-content { margin: 0 !important; padding: 0 !important; }
+  html.wp-toolbar { padding-top: 0 !important; }
+  .wrap { margin: 0 !important; }
+  .sfaf-report { border: 0; padding: 0; max-width: none; }
+  .sfaf-report * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sfaf-tiles { grid-template-columns: repeat(4, 1fr); }
+}

@@ -15,6 +15,8 @@ global $wpdb;
 
 $sfaf_chat_table = $wpdb->prefix . 'sfaf_chat_log';
 $wpdb->query( "DROP TABLE IF EXISTS `$sfaf_chat_table`" );
+$sfaf_chat_table = $wpdb->prefix . 'sfaf_chat_stats';
+$wpdb->query( "DROP TABLE IF EXISTS `$sfaf_chat_table`" );
 
 foreach ( array(
     'sfaf_chat_credentials',
@@ -29,6 +31,7 @@ foreach ( array(
     'sfaf_chat_link_domains',
     'sfaf_chat_contact',
     'sfaf_chat_installed_version',
+    'sfaf_chat_stats_since',
 ) as $sfaf_chat_option ) {
     delete_option( $sfaf_chat_option );
 }

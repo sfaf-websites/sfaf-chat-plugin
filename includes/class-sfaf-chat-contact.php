@@ -355,6 +355,10 @@ class SFAF_Chat_Contact {
         }
         set_transient( self::RATE_KEY, array( 'n' => (int) $rate['n'] + 1 ), 10 * MINUTE_IN_SECONDS );
 
+        // The insights report (1.23.0): one sent form, credited to the conversation's
+        // category. Nothing the visitor typed goes with it.
+        SFAF_Chat_Stats::record_action( 'contact', $in['cat_team'] ?? '', $in['cat_sub'] ?? '', true === ( $in['cat_first'] ?? null ) );
+
         // The team has it; the visitor's note is a courtesy, so its failure is not theirs.
         self::send_confirmation( $email );
 

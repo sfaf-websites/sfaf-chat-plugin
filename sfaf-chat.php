@@ -3,7 +3,7 @@
  * Plugin Name: SFAF Chat
  * Plugin URI: https://sfaf.org
  * Description: The San Francisco AIDS Foundation website assistant. Answers questions about SFAF services from curated, staff-reviewed knowledge, with guardrails, de-identified analytics, and staff-approved pinned answers.
- * Version: 1.22.0
+ * Version: 1.23.0
  * Author: San Francisco AIDS Foundation
  * Author URI: https://sfaf.org
  * License: GPL v2 or later
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'SFAF_CHAT_VERSION', '1.22.0' );
+define( 'SFAF_CHAT_VERSION', '1.23.0' );
 define( 'SFAF_CHAT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'SFAF_CHAT_URL', plugin_dir_url( __FILE__ ) );
 define( 'SFAF_CHAT_FILE', __FILE__ );
@@ -25,6 +25,7 @@ require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-credentials.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-models.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-settings.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-log.php';
+require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-stats.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-pinned.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-starters.php';
 require_once SFAF_CHAT_DIR . 'includes/class-sfaf-chat-appearance.php';
@@ -49,6 +50,7 @@ function sfaf_chat_boot() {
 
     add_action( SFAF_Chat_Log::CRON_HOOK, array( 'SFAF_Chat_Log', 'prune' ) );
     add_action( SFAF_Chat_Log::CRON_HOOK, array( 'SFAF_Chat_Alerts', 'prune' ) );
+    add_action( SFAF_Chat_Log::CRON_HOOK, array( 'SFAF_Chat_Stats', 'prune' ) );
 
     ( new SFAF_Chat_Endpoint() )->register();
 
@@ -60,6 +62,7 @@ function sfaf_chat_boot() {
         require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-admin-index.php';
         require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-admin-contact.php';
         require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-dashboard.php';
+        require_once SFAF_CHAT_DIR . 'admin/class-sfaf-chat-admin-report.php';
         ( new SFAF_Chat_Admin() )->register();
     }
 

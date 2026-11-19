@@ -34,6 +34,7 @@
   var PROXY_URL = CONFIG.proxy || 'https://resources.sfaf.org/wp-json/sfaf-chat/v1/ask';
   var STARTERS_URL = PROXY_URL.replace(/\/ask$/, '/starters');
   var CONTACT_URL = PROXY_URL.replace(/\/ask$/, '/contact');
+  var TRACK_URL = PROXY_URL.replace(/\/ask$/, '/track');
 
   // Prior messages sent with each question.
   // KEEP EQUAL TO MAX_HISTORY_TURNS IN includes/class-sfaf-chat-endpoint.php.
@@ -647,6 +648,28 @@
   root.appendChild(panel);
   document.body.appendChild(root);
 
+  // The insights report (1.23.0): which links in the chat were used. Counts only.
+  messages.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+    if (!a || !messages.contains(a)) return;
+    var type = actionFor(a);
+    if (!type) return;
+    var cat = catOf(a);
+    if (type === 'appointment') { apptCat = cat; apptAt = Date.now(); }
+    track(type, cat);
+  }, true);
+
+  // A visit type chosen in the appointment chooser the chat opened ("clicked toward
+  // booking"). Booking itself happens on healow and is not seen here. On www, the site's own
+  // script moves the address to data-exit, so either attribute counts.
+  document.addEventListener('click', function (e) {
+    if (!apptAt || Date.now() - apptAt > 30 * 60 * 1000) return;
+    var opt = e.target && e.target.closest ? e.target.closest('#sfaf-appt-modal a') : null;
+    if (!opt) return;
+    var to = (opt.getAttribute('href') || '') + ' ' + (opt.getAttribute('data-exit') || '');
+    if (/healow\.com/i.test(to)) track('healow', apptCat);
+  }, true);
+
   /* ============================ WEGLOT PAIRING ============================ */
   /*
    * Weglot's default selector is fixed in the bottom-right corner, and its size
@@ -956,6 +979,7 @@
     var cta = el('a', 'sfaf-card-cta');
     markFlow(cta, card.cta || (card.type === 'event' ? 'Event details' : 'Read more'), true);
     cta.href = card.url;
+    if (card.type === 'event') cta.setAttribute('data-sfaf-kind', 'event');
     cta.target = '_blank';
     cta.rel = 'noopener';
     body.appendChild(cta);
@@ -1099,6 +1123,63 @@
   var inflight = null;   // AbortController of the current request
   var session = 0;       // bumps on close, so a late reply can't land in a new thread
 
+  /*
+   * The insights report (1.23.0). Each reply carries its category {team, sub}; the
+   * elements it adds are tagged with it, so an action is credited to the reply it came
+   * from. Kept in memory for this conversation only, cleared on close, and sent as
+   * counts: the server never learns which conversation anything came from.
+   */
+  var cats = [];          // categories of this conversation's replies, by tag number
+  var seenCats = [];      // "team|sub" asked about in this conversation
+  var actedCats = [];     // "team|sub" this conversation already took an action in
+  var apptCat = null;     // the category of the last booking link opened from the chat
+  var apptAt = 0;
+
+  function catKey(c) { return c ? c.team + '|' + c.sub : ''; }
+
+  function catOf(node) {
+    var tagged = node && node.closest ? node.closest('[data-sfaf-cat]') : null;
+    var i = tagged ? parseInt(tagged.getAttribute('data-sfaf-cat'), 10) : -1;
+    return cats[i] || null;
+  }
+
+  // Credit an action to a category: "first" only for the conversation's first action in it.
+  function credit(cat) {
+    var key = catKey(cat);
+    var first = !!key && actedCats.indexOf(key) === -1;
+    if (first) actedCats.push(key);
+    return first;
+  }
+
+  function track(type, cat) {
+    var first = credit(cat);
+    try {
+      fetch(TRACK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: type, team: cat ? cat.team : '', sub: cat ? cat.sub : '', first: first }),
+        credentials: 'omit',
+        mode: 'cors',
+        keepalive: true
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
+  // What a click in the chat was, or null for anything the report doesn't count.
+  function actionFor(a) {
+    var href = a.getAttribute('href') || '';
+    if (a.classList.contains('sfaf-appt-link')) return 'appointment';
+    if (/^tel:/i.test(href)) return 'phone';
+    if (a.classList.contains('sfaf-donatebtn')) return 'donate';
+    if (a.getAttribute('data-sfaf-kind') === 'event') return 'calendar';
+    var u;
+    try { u = new URL(href, location.href); } catch (e) { return null; }
+    if (!/^https?:$/.test(u.protocol)) return null;
+    if (/^donate\./i.test(u.hostname) || /\/donat(e|ion)/i.test(u.pathname)) return 'donate';
+    if (/\/(calendar|events?)(\/|$)/i.test(u.pathname)) return 'calendar';
+    return null;
+  }
+
   function setBusy(on) {
     busy = on;
     sendBtn.disabled = on;
@@ -1137,7 +1218,7 @@
     fetch(PROXY_URL, requestOptions(
       // The page goes along for routing "Contact our team" and for the Dashboard:
       // origin and path only, never the query or fragment.
-      { question: question, history: history, scope: SCOPE, page: pageAddress() },
+      { question: question, history: history, scope: SCOPE, page: pageAddress(), seen: seenCats.slice() },
       ctrl ? ctrl.signal : undefined
     ))
       .then(function (res) { return res.json(); })
@@ -1146,6 +1227,7 @@
         if (!data || !data.ok || typeof data.answer !== 'string') throw new Error('bad reply');
 
         showTyping(false);
+        var before = messages.childNodes.length;
         var bubble = addBubble('bot', data.answer);
         // The server put the harm reduction label first: shown as a caution (1.20.0).
         if (data.harm_reduction === true && bubble.firstChild && bubble.firstChild.classList &&
@@ -1157,6 +1239,13 @@
         if (data.donate) addDonate(data.donate);
         if (data.contact && typeof data.contact.label === 'string') {
           addContact(data.contact.label, typeof data.contact.team === 'string' ? data.contact.team : '');
+        }
+        if (data.cat && typeof data.cat.team === 'string' && typeof data.cat.sub === 'string') {
+          var tag = cats.push({ team: data.cat.team, sub: data.cat.sub }) - 1;
+          for (var n = before; n < messages.childNodes.length; n++) {
+            messages.childNodes[n].setAttribute('data-sfaf-cat', String(tag));
+          }
+          if (seenCats.indexOf(catKey(data.cat)) === -1) seenCats.push(catKey(data.cat));
         }
 
         // Only completed exchanges enter the thread.
@@ -1224,6 +1313,8 @@
 
   function showContactForm(label, btn, team) {
     var form = el('form', 'sfaf-contact');
+    var formCat = catOf(btn);
+    if (formCat) form.setAttribute('data-sfaf-cat', btn.getAttribute('data-sfaf-cat'));
     form.noValidate = true;
     form.setAttribute('aria-label', label);
     form.appendChild(el('div', 'sfaf-contact-title', label));
@@ -1284,7 +1375,9 @@
       sendText.textContent = 'Sending…';
       fetch(CONTACT_URL, requestOptions({
         name: n, email: m, phone: ph, details: details.input.value.trim(), team: team,
-        page: pageAddress(), thread: thread.slice(), website: hpInput.value
+        page: pageAddress(), thread: thread.slice(), website: hpInput.value,
+        cat_team: formCat ? formCat.team : '', cat_sub: formCat ? formCat.sub : '',
+        cat_first: !!formCat && actedCats.indexOf(catKey(formCat)) === -1
       }))
         .then(function (res) { return res.json(); })
         .then(function (data) {
@@ -1297,6 +1390,7 @@
           }
           form.remove();
           contactEl = null;
+          if (formCat) credit(formCat);
           // A success state with a check (1.21.0), not an ordinary reply.
           var done = addBubble('bot', typeof data.message === 'string' ? data.message : 'Thanks. Someone will reach out soon.', 'sfaf-success');
           var doneText = el('div', 'sfaf-success-text');
@@ -1497,6 +1591,11 @@
     stopListening(true);
     stopSpeaking();
     thread = [];
+    cats = [];
+    seenCats = [];
+    actedCats = [];
+    apptCat = null;
+    apptAt = 0;
     asked = false;
     lastAnswer = '';
     noteEl = null;

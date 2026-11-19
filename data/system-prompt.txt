@@ -328,7 +328,9 @@ Respond with ONLY a single JSON object. No markdown, no code fences, no text bef
   "fully_answered": true or false,
   "contact_team": "a team name from CONTACT FORM, or null",
   "harm_reduction": true or false,
-  "warm_lead": true or false
+  "warm_lead": true or false,
+  "report_team": "a team name from REPORT CATEGORIES, or General",
+  "subcategory": "a short, broad label for what they asked about"
 }
 
 - "in_scope" is false whenever you declined for any reason.
@@ -353,6 +355,13 @@ Respond with ONLY a single JSON object. No markdown, no code fences, no text bef
   an open question: they're considering it, hesitating, or asking something a person
   could help with. False for a direct, ready-to-act question ("How do I donate?", "How do
   I sign up for Cycle to Zero?", "How do I volunteer?") and for every other subject.
+- "report_team" and "subcategory" are for our monthly report only and never change your
+  answer. "report_team" is the team in REPORT CATEGORIES whose work the latest message is
+  about, exactly as named; "General" when REPORT CATEGORIES is absent or no team clearly
+  fits, and for anything not about SFAF. "subcategory" is a broad label of two to four
+  words ("PrEP access", "Testing locations", "Volunteering"), reusing one from REPORT
+  CATEGORIES when it fits. Never a label for one question, and never names, contact details
+  or anything personal in it.
 - "topic" is the subject of the person's latest message, meaning what it is ABOUT, even when
   you decline it (a personal PEP question is still "prep-pep"). It is used only to count which
   subjects people ask about. Use "off-topic" for anything unrelated to SFAF, including

@@ -67,6 +67,7 @@ class SFAF_Chat_Log {
 
     /**
      * @param array $entry topic, in_scope, flag, link, pin, http, model, attempts, question, answer, page.
+     * @return int The new row's id, or 0 when it wasn't written.
      */
     public static function write( array $entry ) {
         global $wpdb;
@@ -93,6 +94,7 @@ class SFAF_Chat_Log {
         $suppress = $wpdb->suppress_errors( true );
         $wpdb->insert( self::table(), $row );
         $wpdb->suppress_errors( $suppress );
+        $id = (int) $wpdb->insert_id;
 
         // Backstop for the daily job: WordPress cron only runs when something
         // triggers it, and 60 days is a promise. Roughly 1 request in 50 pays.
@@ -102,8 +104,9 @@ class SFAF_Chat_Log {
             }
         } catch ( Exception $e ) {
             // random_int can throw with no entropy source. Skip it, never fail.
-            return;
+            return $id;
         }
+        return $id;
     }
 
     /** Delete rows older than RETENTION_DAYS. */

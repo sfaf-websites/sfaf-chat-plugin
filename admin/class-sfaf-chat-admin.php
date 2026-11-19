@@ -32,6 +32,7 @@ class SFAF_Chat_Admin {
     private $messages;
     private $indexing;
     private $contact;
+    private $report;
 
     public function register() {
         $this->appearance = new SFAF_Chat_Admin_Appearance( $this );
@@ -41,6 +42,8 @@ class SFAF_Chat_Admin {
         $this->indexing->register();
         $this->contact    = new SFAF_Chat_Admin_Contact( $this );
         $this->contact->register();
+        $this->report     = new SFAF_Chat_Admin_Report( $this );
+        $this->report->register();
         $this->appearance->register();
         $this->questions->register();
         $this->messages->register();
@@ -66,6 +69,7 @@ class SFAF_Chat_Admin {
         add_submenu_page( self::MENU, 'Special Instructions', 'Special Instructions', self::CAP, self::SPECIAL_PAGE, array( $this, 'render_special' ) );
         add_submenu_page( self::MENU, 'Pinned Answers', 'Pinned Answers', self::CAP, self::PINS_PAGE, array( $this, 'render_pins' ) );
         add_submenu_page( self::MENU, 'SFAF Chat Dashboard', 'Dashboard', self::CAP, self::DASH_PAGE, array( 'SFAF_Chat_Dashboard', 'render' ) );
+        add_submenu_page( self::MENU, 'SFAF Chat Report', 'Report', self::CAP, SFAF_Chat_Admin_Report::PAGE, array( $this->report, 'render' ) );
     }
 
     public function assets( $hook ) {
@@ -75,7 +79,7 @@ class SFAF_Chat_Admin {
         wp_enqueue_style( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/css/admin.css', array(), SFAF_CHAT_VERSION );
 
         $is_appearance = false !== strpos( (string) $hook, SFAF_Chat_Admin_Appearance::PAGE );
-        if ( $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Contact::PAGE ) ) {
+        if ( $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Contact::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Report::PAGE ) ) {
             wp_enqueue_script( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/js/admin.js', array(), SFAF_CHAT_VERSION, true );
             wp_add_inline_script( 'sfaf-chat-admin', 'window.sfafChatAdmin=' . wp_json_encode( array( 'pairs' => SFAF_Chat_Appearance::PAIRS ) ) . ';', 'before' );
         }
@@ -93,6 +97,7 @@ class SFAF_Chat_Admin {
             self::SPECIAL_PAGE               => 'Special Instructions',
             self::PINS_PAGE                  => 'Pinned Answers',
             self::DASH_PAGE                  => 'Dashboard',
+            SFAF_Chat_Admin_Report::PAGE     => 'Report',
         );
         echo '<nav class="nav-tab-wrapper sfaf-chat-tabs" aria-label="SFAF Chat sections">';
         foreach ( $tabs as $slug => $label ) {

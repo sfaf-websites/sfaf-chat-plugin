@@ -202,6 +202,11 @@ class SFAF_Chat_Endpoint {
             'callback'            => array( $this, 'contact' ),
             'permission_callback' => '__return_true',
         ) );
+        register_rest_route( self::REST_NAMESPACE, '/track', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'track' ),
+            'permission_callback' => '__return_true',
+        ) );
         register_rest_route( self::REST_NAMESPACE, '/widget\.js', array(
             'methods'             => 'GET',
             'callback'            => array( $this, 'widget_placeholder' ),
@@ -265,7 +270,7 @@ class SFAF_Chat_Endpoint {
         do_action( 'litespeed_control_set_nocache', 'sfaf-chat' );
 
         // The routes the widget calls from another site. All get the CORS rules.
-        $is_called = in_array( $route, array( '/' . self::REST_NAMESPACE . '/ask', '/' . self::REST_NAMESPACE . '/starters', '/' . self::REST_NAMESPACE . '/contact' ), true );
+        $is_called = in_array( $route, array( '/' . self::REST_NAMESPACE . '/ask', '/' . self::REST_NAMESPACE . '/starters', '/' . self::REST_NAMESPACE . '/contact', '/' . self::REST_NAMESPACE . '/track' ), true );
         $is_widget = '/' . self::REST_NAMESPACE . '/widget.js' === $route;
 
         if ( $is_called ) {
@@ -346,6 +351,31 @@ class SFAF_Chat_Endpoint {
         return new WP_REST_Response( $result, $status );
     }
 
+    /* ================================= TRACK ============================== */
+
+    /**
+     * An action in the chat, for the insights report (1.23.0): {type, team, sub, first}.
+     * Same switch and origin rules as ask. Counts only: SFAF_Chat_Stats keeps the type,
+     * the time and the conversation's category, and nothing about who.
+     */
+    public function track( WP_REST_Request $request ) {
+        if ( ! SFAF_Chat_Settings::is_on() ) {
+            return $this->fail( 'The assistant is not available.', 403 );
+        }
+        if ( ! self::origin_allowed( get_http_origin() ) ) {
+            return $this->fail( 'Forbidden', 403 );
+        }
+        $body = json_decode( (string) $request->get_body(), true );
+        $body = is_array( $body ) ? $body : array();
+        $type = (string) ( $body['type'] ?? '' );
+        if ( 'contact' === $type || ! isset( SFAF_Chat_Stats::ACTIONS[ $type ] ) ) {
+            // A sent contact form is counted by the server when it is really sent.
+            return $this->fail( 'Unknown action', 400 );
+        }
+        SFAF_Chat_Stats::record_action( $type, $body['team'] ?? '', $body['sub'] ?? '', true === ( $body['first'] ?? null ) );
+        return new WP_REST_Response( array( 'ok' => true ), 200 );
+    }
+
     /* ================================== ASK =============================== */
 
     /** An error in the shape the widget already understands. */
@@ -385,6 +415,17 @@ class SFAF_Chat_Endpoint {
 
         // Optional scope; unknown values fall back to "all".
         $scope = is_array( $body ) && is_string( $body['scope'] ?? null ) ? strtolower( trim( $body['scope'] ) ) : 'all';
+
+        // Categories this conversation has already asked about ("team|label"), from the
+        // widget's memory, so the report can count conversations without knowing whose.
+        $seen_cats = array();
+        if ( is_array( $body ) && is_array( $body['seen'] ?? null ) ) {
+            foreach ( array_slice( $body['seen'], 0, 50 ) as $c ) {
+                if ( is_string( $c ) ) {
+                    $seen_cats[] = mb_substr( $c, 0, 130 );
+                }
+            }
+        }
 
         // The page this was asked on, as the widget reports it, cleaned. For routing a
         // contact request and for the Dashboard; never sent to the model.
@@ -749,6 +790,7 @@ class SFAF_Chat_Endpoint {
         // Closures from the calendar and staff alerts, when there is something current
         // or the visitor asks whether we're open. Empty otherwise, so it adds nothing.
         $system_instruction .= self::contact_section();
+        $system_instruction .= self::report_section();
         $system_instruction .= SFAF_Chat_Closures::status_section( $question, SFAF_Chat_Alerts::active() );
 
         /* --------------------------- CALL GEMINI -------------------------- */
@@ -778,6 +820,9 @@ class SFAF_Chat_Endpoint {
                         'harm_reduction' => array( 'type' => 'boolean' ),
                         // Interest in giving or signing up, with an open question (1.20.0).
                         'warm_lead'      => array( 'type' => 'boolean' ),
+                        // For the insights report only (1.23.0): see report_section().
+                        'report_team'    => array( 'type' => 'string', 'nullable' => true ),
+                        'subcategory'    => array( 'type' => 'string' ),
                     ),
                     'required'   => array( 'answer', 'in_scope', 'topic' ),
                 ),
@@ -951,7 +996,7 @@ class SFAF_Chat_Endpoint {
             }
         }
 
-        SFAF_Chat_Log::write( array(
+        $log_id = SFAF_Chat_Log::write( array(
             'question' => $question,
             'answer'   => $answer,
             'page'     => $page,
@@ -963,6 +1008,18 @@ class SFAF_Chat_Endpoint {
             'model'    => $model,
             'attempts' => $attempts,
         ) );
+
+        // The insights report (1.23.0): the model's team and label, cleaned and folded
+        // into the ones in use, and whether the chat struggled. Counts only.
+        $report_team = SFAF_Chat_Stats::team( $parsed['report_team'] ?? '' );
+        $report_sub  = SFAF_Chat_Stats::label( $report_team, $parsed['subcategory'] ?? '' );
+        SFAF_Chat_Stats::record_question(
+            $report_team,
+            $report_sub,
+            SFAF_Chat_Stats::gap( $flag, $answered_in_scope, $fully_answered ),
+            ! in_array( $report_team . '|' . $report_sub, $seen_cats, true ),
+            $log_id
+        );
 
         return new WP_REST_Response( array(
             'ok'       => true,
@@ -976,6 +1033,9 @@ class SFAF_Chat_Endpoint {
             // The answer's first paragraph is the harm reduction label: the widget shows
             // it as a caution (1.20.0). Styling only; the text is already in the answer.
             'harm_reduction' => $harm_reduction,
+            // The conversation's category, so the widget can credit an action to it and
+            // tell the next question what this conversation has covered (1.23.0).
+            'cat'      => array( 'team' => $report_team, 'sub' => $report_sub ),
         ), 200 );
     }
 
@@ -992,7 +1052,7 @@ class SFAF_Chat_Endpoint {
      *
      * @return array{reply:mixed,http:int,attempts:int}
      */
-    private static function call_gemini( $endpoint, array $request ) {
+    public static function call_gemini( $endpoint, array $request ) {
         $budget  = (float) apply_filters( 'sfaf_chat_retry_budget', self::RETRY_BUDGET_SECONDS );
         $start   = microtime( true );
         $attempt = 0;
@@ -1026,7 +1086,32 @@ class SFAF_Chat_Endpoint {
         return array( 'reply' => $reply, 'http' => $http, 'attempts' => $attempt );
     }
 
-    /** Staff instructions, added after the base rules. Empty adds nothing at all. */
+    /**
+     * REPORT CATEGORIES (1.23.0): the teams and the labels in use, so the model sorts
+     * each question for the insights report and reuses labels instead of inventing
+     * near-duplicates. Absent while no team is set up on the Contact screen, which keeps
+     * the request unchanged; the base prompt then says to use General, and the server
+     * still folds the model's labels into the ones in use.
+     */
+    private static function report_section() {
+        $teams = SFAF_Chat_Stats::teams();
+        if ( array() === $teams ) {
+            return '';
+        }
+        $labels = SFAF_Chat_Stats::labels( SFAF_Chat_Stats::PROMPT_SUBS );
+        $teams[] = array( 'team' => SFAF_Chat_Stats::GENERAL, 'handles' => 'Anything no team above clearly handles, and anything not about SFAF.' );
+        $clean   = function ( $v ) use ( &$clean ) {
+            return is_array( $v ) ? array_map( $clean, $v ) : SFAF_Chat_Core::no_em_dash( (string) $v );
+        };
+        return "\n\n## REPORT CATEGORIES\n"
+            . "For our monthly report only; the visitor never sees these. Set \"report_team\" to the team below whose "
+            . "work the question is about, by its subject, exactly as named (General when none clearly fits). Set "
+            . "\"subcategory\" to a short, broad label for it within that team. Reuse a label from LABELS IN USE when "
+            . "one fits, even loosely; make a new one only for a clearly different subject.\n"
+            . 'TEAMS ' . wp_json_encode( $clean( $teams ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . "\n"
+            . 'LABELS IN USE ' . wp_json_encode( (object) $clean( $labels ), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+    }
+
     /**
      * CONTACT FORM (1.17.0): only while the form can really be offered, so the model
      * never promises a button that won't appear. Says what the form does, so the

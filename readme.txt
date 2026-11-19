@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.22.0
+Stable tag: 1.23.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,29 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.23.0 =
+* New Report screen (SFAF Chat > Report): a monthly insights report for all teams or one
+  team, for any date range. It shows what people asked about (questions by team, or by
+  subject within a team), where the chat struggled (questions it had no information for,
+  answered only in part, or declined, with the reasons), and what people did next.
+* Every question is sorted by the model into one of the teams on the Contact screen (or
+  General) and a short, broad subject. Subjects already in use are offered back to the
+  model, and near-duplicates are merged, so the list stays short.
+* Tracked actions: contact form sent, appointment chooser opened, a visit type chosen in
+  the chooser (clicked toward booking; booking itself happens on healow and is not
+  tracked), Donate, event or calendar links, and phone numbers. Each is credited to the
+  subject of the reply it came from, and the report shows how many conversations on a
+  subject went on to take an action.
+* Print / Save as PDF prints the report alone, with its charts and numbers, for the team
+  meeting.
+* "Sort earlier questions" puts questions already in the log (those logged with their
+  text) into the report, 20 per model call, with progress shown.
+* "Reset test data before launch" empties the report, after a tick box and a
+  confirmation. The question log is not changed.
+* Counts only: the report keeps no question text, names, contact details, pages or
+  anything that identifies a visitor or a conversation. Raw question logging is
+  unchanged and keeps its own switch.
 
 = 1.22.0 =
 * Contact screen: teams are no longer a fixed set of rows. "Add team" adds a row (up to 50

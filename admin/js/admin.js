@@ -274,7 +274,60 @@
     refresh();
   }
 
+  /* ================================ REPORT ================================ */
+
+  // Report screen (1.23.0): print, sort earlier questions with progress, confirm Reset.
+  function initReport() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-print]'), function (b) {
+      b.addEventListener('click', function () { window.print(); });
+    });
+
+    var reset = document.getElementById('sfaf-report-reset');
+    if (reset) {
+      reset.addEventListener('submit', function (e) {
+        if (!window.confirm(reset.getAttribute('data-confirm'))) e.preventDefault();
+      });
+    }
+
+    var form = document.getElementById('sfaf-backfill');
+    var status = document.getElementById('sfaf-backfill-status');
+    if (!form || !status || !window.fetch) return;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var button = form.querySelector('button');
+      button.disabled = true;
+      status.textContent = 'Sorting...';
+      function step() {
+        var body = new URLSearchParams();
+        body.set('action', form.querySelector('[name="action"]').value);
+        body.set('_ajax_nonce', form.getAttribute('data-nonce'));
+        fetch(form.getAttribute('data-ajax'), { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d || !d.ok) {
+              status.textContent = 'Stopped: ' + ((d && d.error) || 'something went wrong') + ' Press the button to continue.';
+              button.disabled = false;
+              return;
+            }
+            if (d.done) {
+              status.textContent = 'Done. Reloading the report...';
+              window.location.reload();
+              return;
+            }
+            status.textContent = d.left + ' left...';
+            step();
+          })
+          .catch(function () {
+            status.textContent = 'Stopped: the connection dropped. Press the button to continue.';
+            button.disabled = false;
+          });
+      }
+      step();
+    });
+  }
+
   initAppearance();
   initQuestions();
   initTeams();
+  initReport();
 })();
