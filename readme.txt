@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.23.0
+Stable tag: 1.24.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,22 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.24.0 =
+* Report restyled in the SFAF brand: one large lead number (Questions asked) with the
+  other three smaller beside it, the two middle sections side by side, flat square bars,
+  and the logo's 9.5 degree angle as the one graphic accent. Same data, sections, team
+  dropdown and dates. It prints to PDF the same way.
+* The report's type is Benton Sans where the computer has it, else Montserrat (the
+  brand's web headline face), which now ships with the plugin under the SIL Open Font
+  License, so the screen and the PDF look the same everywhere and nothing loads from
+  Google.
+* A count of 0 in the report draws no bar, just the 0.
+* Chat messages come in with a quick fade and slide from their own side and a very slight
+  settle (.3 seconds). None with the system's reduce-motion setting.
+* "Contact our team" shows an envelope instead of the arrow, so sending a message no
+  longer looks like going to a page. Page links, Donate, cards and the booking button keep
+  the arrow.
 
 = 1.23.0 =
 * New Report screen (SFAF Chat > Report): a monthly insights report for all teams or one

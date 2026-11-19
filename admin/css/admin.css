@@ -152,68 +152,138 @@
   .sfaf-chat-dash .hbars { grid-template-columns: minmax(90px, max-content) 1fr; }
 }
 
-/* ================================ REPORT (1.23.0) ================================
-   Shown in team meetings and saved as PDF, so it is laid out like a page: SFAF
-   yellow #FFD900 on #373433, brand green #8CC745 for actions, brand red #F04937 for
-   gaps. Bars are HTML, so they print exactly. */
-.sfaf-report-wrap { --r-ink: #373433; --r-yellow: #FFD900; --r-green: #8CC745; --r-red: #F04937; --r-line: #e4e2e0; --r-muted: #6b6765; }
+/* ================================ REPORT (1.23.0, restyled 1.24.0) ================
+   Shown in team meetings and saved as PDF, so it is laid out like a printed page, in the
+   SFAF brand guide's terms: square corners, flat color, no soft shadows, #373433 and
+   #FFD900, with brand red #F04937 for gaps and brand green #8CC745 for actions.
+
+   Type: Benton Sans (the brand's print face) where the computer has it, else
+   Montserrat (the brand's web headline face), bundled in admin/fonts under the SIL Open
+   Font License, so the screen and the PDF match on any computer and nothing is asked of
+   Google. Arial is the brand guide's own stand-in.
+
+   The 9.5 degree angle of the logo is the one motif (--r-angle): the band behind the
+   kicker, the stripe on the lead number, and the chips beside each heading and figure.
+   The brand guide says not to overdo it, so it is used nowhere else.
+
+   Bars are HTML, so they print exactly; print-color-adjust keeps every fill on paper. */
+@font-face {
+  font-family: "SFAF Report Sans";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/montserrat-latin.woff2") format("woff2");
+}
+.sfaf-report-wrap { --r-ink: #373433; --r-yellow: #FFD900; --r-green: #8CC745; --r-red: #F04937; --r-line: #dcdad8;
+  --r-track: #efeeec; --r-muted: #625e5c; --r-angle: -9.5deg;
+  --r-font: "Benton Sans", "BentonSans", "SFAF Report Sans", Arial, sans-serif; }
 .sfaf-report-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin: 16px 0; max-width: 980px; }
 .sfaf-report-controls label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
 .sfaf-report-controls select, .sfaf-report-controls input[type="date"] { font-weight: 400; min-height: 32px; }
 .sfaf-report-presets { display: flex; gap: 12px; align-items: center; min-height: 32px; }
 .sfaf-report-print { margin-left: auto !important; }
 
-.sfaf-report { background: #fff; color: var(--r-ink); max-width: 980px; padding: 36px 40px 28px; border: 1px solid var(--r-line); box-sizing: border-box; }
-.sfaf-report-head { border-bottom: 6px solid var(--r-yellow); padding-bottom: 14px; margin-bottom: 24px; }
-.sfaf-report-kicker { margin: 0; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; font-weight: 700; color: var(--r-muted); }
-.sfaf-report-head h2 { margin: 4px 0 2px; font-size: 28px; line-height: 1.2; color: var(--r-ink); }
-.sfaf-report-range { margin: 0; font-size: 15px; color: var(--r-muted); }
+.sfaf-report { background: #fff; color: var(--r-ink); max-width: 980px; padding: 40px 44px 30px; border: 1px solid var(--r-line);
+  border-radius: 0; box-sizing: border-box; font-family: var(--r-font); font-size: 14px; line-height: 1.45; }
+.sfaf-report h2, .sfaf-report h3, .sfaf-report h4 { font-family: var(--r-font); color: var(--r-ink); }
 
-.sfaf-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 8px; }
-.sfaf-tile { background: var(--r-ink); color: #fff; padding: 14px 16px; border-top: 4px solid var(--r-yellow); }
-.sfaf-tile-gap { border-top-color: var(--r-red); }
-.sfaf-tile-action { border-top-color: var(--r-green); }
-.sfaf-tile-n { display: block; font-size: 30px; font-weight: 700; line-height: 1.1; }
-.sfaf-tile-l { display: block; font-size: 13px; margin-top: 4px; opacity: .9; }
+/* Masthead: the kicker sits on a yellow band cut at the logo's angle. */
+.sfaf-report-head { margin-bottom: 28px; }
+.sfaf-report-kicker { margin: 0 0 12px; display: inline-block; position: relative; padding: 5px 18px 5px 12px;
+  font-size: 11.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--r-ink); }
+.sfaf-report-kicker::before { content: ""; position: absolute; inset: 0; background: var(--r-yellow); transform: skewX(var(--r-angle)); transform-origin: 0 100%; z-index: 0; }
+.sfaf-report-kicker span { position: relative; z-index: 1; }
+.sfaf-report-head h2 { margin: 0; font-size: 34px; line-height: 1.12; font-weight: 800; letter-spacing: -.01em; }
+.sfaf-report-range { margin: 6px 0 0; font-size: 15px; font-weight: 500; color: var(--r-muted); }
 
-.sfaf-report-section { margin-top: 30px; break-inside: avoid; page-break-inside: avoid; }
-.sfaf-report-section h3 { font-size: 19px; margin: 0 0 4px; color: var(--r-ink); }
-.sfaf-report-section h4 { font-size: 14px; margin: 18px 0 8px; color: var(--r-ink); }
-.sfaf-report-lead { margin: 0 0 12px; color: var(--r-muted); }
-.sfaf-report-note { font-size: 12.5px; color: var(--r-muted); margin: 10px 0 0; }
-.sfaf-report-empty { color: var(--r-muted); font-style: italic; margin: 6px 0; }
+/* Headline numbers: one lead figure, three smaller ones beside it. */
+.sfaf-r-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 0 36px; align-items: stretch; margin-bottom: 8px; }
+.sfaf-r-primary { position: relative; overflow: hidden; background: var(--r-ink); color: #fff; padding: 26px 64px 24px 28px;
+  display: flex; flex-direction: column; justify-content: flex-end; min-height: 210px; }
+.sfaf-r-primary::after { content: ""; position: absolute; top: -2px; bottom: -2px; right: 26px; width: 16px; background: var(--r-yellow);
+  transform: skewX(var(--r-angle)); }
+.sfaf-r-primary-n { display: block; font-size: 104px; line-height: .9; font-weight: 800; letter-spacing: -.035em; color: var(--r-yellow);
+  font-variant-numeric: tabular-nums; }
+.sfaf-r-primary-l { display: block; margin-top: 14px; font-size: 20px; font-weight: 700; }
+.sfaf-r-primary-sub { display: block; margin-top: 2px; font-size: 13.5px; color: #d1d3d4; }
 
+.sfaf-r-kpis { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.sfaf-r-kpi { position: relative; margin: 0; padding: 12px 0 12px 26px; border-bottom: 1px solid var(--r-line);
+  display: grid; grid-template-columns: 104px 1fr; grid-template-areas: "n l" "n sub"; column-gap: 12px; align-items: center; }
+.sfaf-r-kpi:first-child { padding-top: 2px; }
+.sfaf-r-kpi:last-child { border-bottom: 0; padding-bottom: 2px; }
+.sfaf-r-kpi::before { content: ""; position: absolute; left: 4px; top: 14px; bottom: 14px; width: 8px; background: var(--r-ink); transform: skewX(var(--r-angle)); }
+.sfaf-r-kpi:first-child::before { top: 4px; }
+.sfaf-r-kpi:last-child::before { bottom: 4px; }
+.sfaf-r-kpi-gap::before { background: var(--r-red); }
+.sfaf-r-kpi-action::before { background: var(--r-green); }
+.sfaf-r-kpi .sfaf-tile-n { grid-area: n; min-width: 2.6ch; font-size: 38px; line-height: 1; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.sfaf-r-kpi-l { grid-area: l; align-self: end; font-size: 15px; font-weight: 700; }
+.sfaf-r-kpi-sub { grid-area: sub; align-self: start; font-size: 12.5px; color: var(--r-muted); }
+
+/* Sections. Each heading carries a small chip in its color, at the logo's angle. */
+.sfaf-report-section { margin-top: 36px; break-inside: avoid; page-break-inside: avoid; }
+.sfaf-report-section h3 { position: relative; font-size: 20px; line-height: 1.25; font-weight: 800; margin: 0 0 4px; }
+.sfaf-report-section h3::before { content: ""; position: absolute; left: -21px; top: 3px; bottom: 3px; width: 9px; background: var(--r-yellow); transform: skewX(var(--r-angle)); }
+.sfaf-r-gaps h3::before { background: var(--r-red); }
+.sfaf-r-actions h3::before, .sfaf-r-conversion h3::before { background: var(--r-green); }
+.sfaf-report-section h4 { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; margin: 22px 0 10px; }
+.sfaf-report-lead { margin: 0 0 16px; color: var(--r-muted); }
+.sfaf-report-note { font-size: 12.5px; color: var(--r-muted); margin: 12px 0 0; }
+.sfaf-report-empty { color: var(--r-muted); margin: 6px 0; }
+
+/* Two panels side by side: what went wrong, and what people did. */
+.sfaf-r-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 48px; }
+
+/* Bars: flat and square. Wide sections put label, bar and count on one line; the two
+   side-by-side panels put the label and count over the bar. */
 .sfaf-bars { list-style: none; margin: 0; padding: 0; }
-.sfaf-bars li { display: grid; grid-template-columns: minmax(140px, 32%) 1fr 56px; gap: 12px; align-items: center; margin: 0 0 7px; }
-.sfaf-bar-label { font-size: 13.5px; overflow-wrap: anywhere; }
-.sfaf-bar-track { background: #f3f2f1; height: 18px; display: block; }
-.sfaf-bar { display: block; height: 100%; background: var(--r-yellow); box-shadow: inset 0 0 0 1px rgba(55, 52, 51, .18); }
-.sfaf-bars-gap .sfaf-bar { background: var(--r-red); box-shadow: none; }
-.sfaf-bars-action .sfaf-bar { background: var(--r-green); box-shadow: none; }
-.sfaf-bar-n { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.sfaf-bars li { display: grid; grid-template-columns: minmax(150px, 30%) 1fr 48px; gap: 14px; align-items: center; margin: 0 0 8px; }
+.sfaf-bar-label { font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.sfaf-bar-track { background: var(--r-track); height: 20px; display: block; }
+.sfaf-bar { display: block; height: 100%; background: var(--r-yellow); }
+.sfaf-bars-gap .sfaf-bar { background: var(--r-red); }
+.sfaf-bars-action .sfaf-bar { background: var(--r-green); }
+.sfaf-bar-n { font-size: 15px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+.sfaf-r-pair .sfaf-bars li { grid-template-columns: 1fr auto; grid-template-areas: "label n" "track track"; gap: 3px 10px; margin-bottom: 11px; }
+.sfaf-r-pair .sfaf-bar-label { grid-area: label; }
+.sfaf-r-pair .sfaf-bar-n { grid-area: n; }
+.sfaf-r-pair .sfaf-bar-track { grid-area: track; height: 12px; }
 
-.sfaf-conv { border-collapse: collapse; width: 100%; font-size: 13.5px; }
-.sfaf-conv th, .sfaf-conv td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--r-line); }
-.sfaf-conv thead th { border-bottom: 2px solid var(--r-ink); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+/* Conversion table: a heavy rule under the head, hairlines between rows. */
+.sfaf-conv { border-collapse: collapse; width: 100%; font-size: 14px; font-family: var(--r-font); }
+.sfaf-conv th, .sfaf-conv td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--r-line); }
+.sfaf-conv thead th { border-bottom: 3px solid var(--r-ink); font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+.sfaf-conv tbody th { font-weight: 700; }
 .sfaf-conv td { font-variant-numeric: tabular-nums; }
-.sfaf-rate { display: inline-block; width: 80px; height: 8px; background: #f3f2f1; margin-right: 8px; vertical-align: middle; }
+.sfaf-conv td:last-child { font-weight: 800; white-space: nowrap; }
+.sfaf-rate { display: inline-block; width: 120px; height: 12px; background: var(--r-track); margin-right: 10px; vertical-align: -1px; }
 .sfaf-rate span { display: block; height: 100%; background: var(--r-green); }
 
-.sfaf-report-foot { margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--r-line); font-size: 12px; color: var(--r-muted); }
+.sfaf-report-foot { margin-top: 36px; padding-top: 12px; border-top: 1px solid var(--r-line); font-size: 12px; color: var(--r-muted); }
 
 .sfaf-report-admin { max-width: 980px; margin-top: 36px; padding-top: 8px; border-top: 1px solid #c3c4c7; }
 .sfaf-report-admin h2 { margin-top: 24px; }
 
 @media (max-width: 782px) {
-  .sfaf-report { padding: 22px 16px; }
-  .sfaf-tiles { grid-template-columns: repeat(2, 1fr); }
-  .sfaf-bars li { grid-template-columns: minmax(100px, 40%) 1fr 44px; }
+  .sfaf-report { padding: 24px 16px; }
+  .sfaf-report-head h2 { font-size: 26px; }
+  .sfaf-r-hero, .sfaf-r-pair { grid-template-columns: minmax(0, 1fr); }
+  .sfaf-r-primary { min-height: 0; margin-bottom: 18px; }
+  .sfaf-r-primary-n { font-size: 76px; }
+  .sfaf-report-section h3 { padding-left: 20px; }
+  .sfaf-report-section h3::before { left: 1px; }
+  .sfaf-r-kpi { grid-template-columns: 84px 1fr; }
+  .sfaf-r-kpi .sfaf-tile-n { font-size: 32px; }
+  .sfaf-bars li { grid-template-columns: minmax(100px, 40%) 1fr 40px; }
+  .sfaf-rate { width: 60px; }
   .sfaf-report-print { margin-left: 0 !important; }
 }
 
-/* Print / Save as PDF: the report alone, on white, with its colors. */
+/* Print / Save as PDF: the report alone, on white, with its colors. The screen layout
+   is kept (it is already a page), only a little tighter. */
 @media print {
-  @page { margin: 14mm 12mm; }
+  @page { size: letter; margin: 13mm 12mm; }
   html, body, #wpwrap, #wpcontent, #wpbody, #wpbody-content { background: #fff !important; }
   #adminmenumain, #adminmenuback, #adminmenuwrap, #wpadminbar, #wpfooter, #screen-meta, #screen-meta-links,
   .sfaf-chat-tabs, .notice, .update-nag, .sfaf-report-controls, .sfaf-report-admin, .sfaf-report-screen-title { display: none !important; }
@@ -221,6 +291,12 @@
   html.wp-toolbar { padding-top: 0 !important; }
   .wrap { margin: 0 !important; }
   .sfaf-report { border: 0; padding: 0; max-width: none; }
-  .sfaf-report * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .sfaf-tiles { grid-template-columns: repeat(4, 1fr); }
+  .sfaf-report, .sfaf-report *, .sfaf-report *::before, .sfaf-report *::after { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sfaf-r-hero { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+  .sfaf-r-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .sfaf-r-hero, .sfaf-r-pair > .sfaf-report-section, .sfaf-bars li, .sfaf-conv tr { break-inside: avoid; page-break-inside: avoid; }
+  .sfaf-report-section h3, .sfaf-report-section h4 { break-after: avoid; page-break-after: avoid; }
+  /* Paper has no margin to hang the heading chips in, so they move inside. */
+  .sfaf-report-section h3 { padding-left: 20px; }
+  .sfaf-report-section h3::before { left: 1px; }
 }

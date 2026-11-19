@@ -110,7 +110,9 @@ class SFAF_Chat_Admin_Report {
         $max  = max( $data );
         echo '<ol class="sfaf-bars sfaf-bars-' . esc_attr( $tone ) . '">';
         foreach ( $data as $label => $n ) {
-            $w = $max > 0 ? max( 1.5, round( 100 * $n / $max, 1 ) ) : 0;
+            // A zero draws no bar at all, just its 0 (1.24.0). Anything above zero keeps
+            // a visible minimum, so a 1 beside a 500 still shows.
+            $w = ( $max > 0 && $n > 0 ) ? max( 1.5, round( 100 * $n / $max, 1 ) ) : 0;
             printf(
                 '<li><span class="sfaf-bar-label">%s</span><span class="sfaf-bar-track"><span class="sfaf-bar" style="width:%s%%"></span></span><span class="sfaf-bar-n">%s</span></li>',
                 esc_html( (string) $label ),
@@ -176,21 +178,51 @@ class SFAF_Chat_Admin_Report {
                 <button type="button" class="button button-primary sfaf-report-print" data-print>Print / Save as PDF</button>
             </form>
 
+            <?php
+            // Lines under the headline numbers, all from the same report data.
+            $answered  = $r['questions'] - $r['struggled'];
+            $n_groups  = count( $r['demand'] );
+            $top_act   = '';
+            if ( $acted > 0 ) {
+                $by_kind = $r['actions'];
+                arsort( $by_kind );
+                $top_act = SFAF_Chat_Stats::ACTIONS[ (string) key( $by_kind ) ] ?? '';
+            }
+            ?>
             <article class="sfaf-report" id="sfaf-report">
                 <header class="sfaf-report-head">
-                    <p class="sfaf-report-kicker">SFAF website chat</p>
+                    <p class="sfaf-report-kicker"><span>SFAF website chat</span></p>
                     <h2>Chat insights: <?php echo esc_html( $scope ); ?></h2>
                     <p class="sfaf-report-range"><?php echo esc_html( self::pretty( $from ) . ' to ' . self::pretty( $to ) ); ?></p>
                 </header>
 
-                <div class="sfaf-tiles">
-                    <div class="sfaf-tile"><span class="sfaf-tile-n"><?php echo esc_html( number_format_i18n( $r['questions'] ) ); ?></span><span class="sfaf-tile-l">Questions asked</span></div>
-                    <div class="sfaf-tile"><span class="sfaf-tile-n"><?php echo esc_html( self::pct( $r['questions'] - $r['struggled'], $r['questions'] ) ); ?></span><span class="sfaf-tile-l">Answered well</span></div>
-                    <div class="sfaf-tile sfaf-tile-gap"><span class="sfaf-tile-n"><?php echo esc_html( number_format_i18n( $r['struggled'] ) ); ?></span><span class="sfaf-tile-l">The chat struggled</span></div>
-                    <div class="sfaf-tile sfaf-tile-action"><span class="sfaf-tile-n"><?php echo esc_html( number_format_i18n( $acted ) ); ?></span><span class="sfaf-tile-l">Actions taken</span></div>
+                <?php /* The lead number, then three smaller ones. .sfaf-tile-n marks every number, in reading order. */ ?>
+                <div class="sfaf-r-hero">
+                    <div class="sfaf-r-primary">
+                        <span class="sfaf-tile-n sfaf-r-primary-n"><?php echo esc_html( number_format_i18n( $r['questions'] ) ); ?></span>
+                        <span class="sfaf-r-primary-l">Questions asked</span>
+                        <span class="sfaf-r-primary-sub"><?php echo esc_html( $n_groups > 0 ? sprintf( 'Across %d %s', $n_groups, 1 === $n_groups ? $by : ( 'team' === $by ? 'teams' : 'subjects' ) ) : 'None in this range' ); ?></span>
+                    </div>
+                    <ul class="sfaf-r-kpis">
+                        <li class="sfaf-r-kpi sfaf-r-kpi-good">
+                            <span class="sfaf-tile-n"><?php echo esc_html( self::pct( $answered, $r['questions'] ) ); ?></span>
+                            <span class="sfaf-r-kpi-l">Answered well</span>
+                            <span class="sfaf-r-kpi-sub"><?php echo esc_html( sprintf( '%s of %s questions', number_format_i18n( $answered ), number_format_i18n( $r['questions'] ) ) ); ?></span>
+                        </li>
+                        <li class="sfaf-r-kpi sfaf-r-kpi-gap">
+                            <span class="sfaf-tile-n"><?php echo esc_html( number_format_i18n( $r['struggled'] ) ); ?></span>
+                            <span class="sfaf-r-kpi-l">The chat struggled</span>
+                            <span class="sfaf-r-kpi-sub"><?php echo esc_html( self::pct( $r['struggled'], $r['questions'] ) . ' of questions' ); ?></span>
+                        </li>
+                        <li class="sfaf-r-kpi sfaf-r-kpi-action">
+                            <span class="sfaf-tile-n"><?php echo esc_html( number_format_i18n( $acted ) ); ?></span>
+                            <span class="sfaf-r-kpi-l">Actions taken</span>
+                            <span class="sfaf-r-kpi-sub"><?php echo esc_html( '' !== $top_act ? 'Most often: ' . $top_act : 'None in this range' ); ?></span>
+                        </li>
+                    </ul>
                 </div>
 
-                <section class="sfaf-report-section">
+                <section class="sfaf-report-section sfaf-r-demand">
                     <h3>What people asked about</h3>
                     <p class="sfaf-report-lead">Questions by <?php echo esc_html( $by ); ?>, whether or not they led to an action.</p>
                     <?php self::bars( $r['demand'], 'demand', 'No questions in this range.' ); ?>
@@ -200,7 +232,8 @@ class SFAF_Chat_Admin_Report {
                     <?php endif; ?>
                 </section>
 
-                <section class="sfaf-report-section">
+                <div class="sfaf-r-pair">
+                <section class="sfaf-report-section sfaf-r-gaps">
                     <h3>Where the chat struggled</h3>
                     <p class="sfaf-report-lead"><?php echo esc_html( sprintf( '%s of %s questions (%s): the chat did not have the information, answered only part, or declined.', number_format_i18n( $r['struggled'] ), number_format_i18n( $r['questions'] ), self::pct( $r['struggled'], $r['questions'] ) ) ); ?></p>
                     <?php self::bars( $r['gaps'], 'gap', 'None in this range.' ); ?>
@@ -216,7 +249,7 @@ class SFAF_Chat_Admin_Report {
                     <?php endif; ?>
                 </section>
 
-                <section class="sfaf-report-section">
+                <section class="sfaf-report-section sfaf-r-actions">
                     <h3>What people did next</h3>
                     <p class="sfaf-report-lead">Actions taken in the chat<?php echo '' === $team ? '' : ', in conversations about this team\'s work'; ?>.</p>
                     <?php
@@ -232,9 +265,12 @@ class SFAF_Chat_Admin_Report {
                     }
                     ?>
                     <p class="sfaf-report-note">Booking itself happens on healow and is not tracked here: "Clicked toward booking" counts visit types chosen in the appointment chooser.</p>
+                </section>
+                </div>
 
-                    <?php if ( array() !== $r['conversion'] ) : ?>
-                        <h4>From question to action, by <?php echo esc_html( $by ); ?></h4>
+                <?php if ( array() !== $r['conversion'] ) : ?>
+                <section class="sfaf-report-section sfaf-r-conversion">
+                        <h3>From question to action, by <?php echo esc_html( $by ); ?></h3>
                         <table class="sfaf-conv">
                             <thead><tr><th scope="col"><?php echo esc_html( ucfirst( $by ) ); ?></th><th scope="col">Conversations</th><th scope="col">Took an action</th><th scope="col">Rate</th></tr></thead>
                             <tbody>
@@ -249,8 +285,8 @@ class SFAF_Chat_Admin_Report {
                             </tbody>
                         </table>
                         <p class="sfaf-report-note">A conversation counts once per <?php echo esc_html( $by ); ?> it asked about, and once if it then took any action there. Questions sorted from earlier logs count toward demand and gaps only.</p>
-                    <?php endif; ?>
                 </section>
+                <?php endif; ?>
 
                 <footer class="sfaf-report-foot">
                     Counts only. This report holds no names, contact details or messages, and nothing in it can be traced to a person.

@@ -225,6 +225,17 @@
     '  border-radius:var(--sfaf-radius);',
     '  animation:sfaf-rise .34s var(--sfaf-ease) both;}',
     '@keyframes sfaf-rise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}',
+    /*
+     * Message entrance (1.24.0): each bubble fades and slides in from its own side, goes
+     * about 2px past its place and settles back, in .3s. A slight overshoot, not a spring,
+     * in step with the launcher bubble's wave. Reduced motion removes it with the rest.
+     */
+    '#sfaf-chat .sfaf-msg.sfaf-bot{transform-origin:0 100%;animation:sfaf-in-bot .3s cubic-bezier(.2,.75,.3,1) both;}',
+    '#sfaf-chat .sfaf-msg.sfaf-user{transform-origin:100% 100%;animation:sfaf-in-user .3s cubic-bezier(.2,.75,.3,1) both;}',
+    '@keyframes sfaf-in-bot{0%{opacity:0;transform:translate(-12px,6px) scale(.97);}',
+    '  60%{opacity:1;transform:translate(2px,-1px) scale(1.005);}100%{opacity:1;transform:none;}}',
+    '@keyframes sfaf-in-user{0%{opacity:0;transform:translate(12px,6px) scale(.97);}',
+    '  60%{opacity:1;transform:translate(-2px,-1px) scale(1.005);}100%{opacity:1;transform:none;}}',
     '#sfaf-chat .sfaf-msg .sfaf-p{margin:0;}',
     // A fixed text color, like the error, so it stays readable whatever the bubble colors are.
     '#sfaf-chat .sfaf-msg .sfaf-p.sfaf-caution{background:var(--sfaf-caution-bg);border-left:3px solid var(--sfaf-caution-edge);',
@@ -488,6 +499,8 @@
   var ICON_MIC = ['M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z', 'M19 11a7 7 0 0 1-14 0', 'M12 18v3'];
   var ICON_SPEAKER = ['M11 5 6 9H3v6h3l5 4z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M18.5 5.5a9.5 9.5 0 0 1 0 13'];
   var ICON_NOTICE = ['M3 3h18v18H3z', 'M12 10.5V17', 'M12 7v.01'];
+  // An envelope (1.24.0), for "Contact our team": sending a message, not going to a page.
+  var ICON_MAIL = ['M3 5.5h18v13H3z', 'M3 6.5l9 6.5 9-6.5'];
 
   // The launcher's bubble: a yellow speech bubble with a dark question mark. Its shape
   // and motion live between the BUBBLE markers here and in the CSS, and nowhere else.
@@ -522,18 +535,20 @@
 
   // An action button's inside: the fill that grows on hover, the label, and the arrow
   // that comes in (left) and the one that goes out (right). Returns the label, whose
-  // text can be changed later without losing the rest.
-  function markFlow(node, labelText, dark) {
+  // text can be changed later without losing the rest. icon: another glyph for the
+  // badge, in the same place and motion (the envelope on "Contact our team").
+  function markFlow(node, labelText, dark, icon) {
+    var glyph = icon || ICON_SEND;
     node.classList.add('sfaf-flow');
     if (dark) node.classList.add('sfaf-flow-dark');
     node.textContent = '';
     node.appendChild(el('span', 'sfaf-flow-disc'));
-    var inArrow = svg(ICON_SEND);
+    var inArrow = svg(glyph);
     inArrow.setAttribute('class', 'sfaf-flow-a sfaf-flow-in');
     node.appendChild(inArrow);
     var text = el('span', 'sfaf-flow-text', labelText);
     node.appendChild(text);
-    var outArrow = svg(ICON_SEND);
+    var outArrow = svg(glyph);
     outArrow.setAttribute('class', 'sfaf-flow-a sfaf-flow-out');
     node.appendChild(outArrow);
     return text;
@@ -1282,7 +1297,8 @@
   function addContact(label, team) {
     if (contactEl) { contactEl.remove(); contactEl = null; }
     var b = el('button', 'sfaf-contactbtn');
-    markFlow(b, label, true);
+    markFlow(b, label, true, ICON_MAIL);
+    b.classList.add('sfaf-flow-mail');
     b.type = 'button';
     b.addEventListener('click', function () { showContactForm(label, b, team || ''); });
     contactEl = b;
