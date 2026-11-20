@@ -109,10 +109,14 @@
     // Action buttons at rest (1.21.0): the same shadow family as the launcher and panel,
     // so they read as buttons without a hover (phones have none).
     '  --sfaf-btn-shadow:0 1px 2px rgba(0,0,0,.14),0 4px 12px rgba(0,0,0,.16);',
-    // Hover swaps (1.21.0): 25% slower than before (.45s to .56s, .6s to .75s, .16s to .2s).
-    '  --sfaf-swap:.56s;',
-    '  --sfaf-glide:.75s;',
-    '  --sfaf-quick:.2s;',
+    // Hover swaps. 1.21.0 made them 25% slower (.45s to .56s, .6s to .75s, .16s to .2s).
+    // 1.25.0 slows them again (.56s to .8s, .75s to 1s, .2s to .32s) and gives them one
+    // gentle curve, --sfaf-soft: a soft start and a long, quiet landing, where the old
+    // curves did most of the change in the first moment and read as a snap.
+    '  --sfaf-swap:.8s;',
+    '  --sfaf-glide:1s;',
+    '  --sfaf-quick:.32s;',
+    '  --sfaf-soft:cubic-bezier(.4,.1,.2,1);',
     '  --sfaf-focus:#373433;',
     '  --sfaf-focus-on-dark:#FFD900;',
     '  --sfaf-bot-bg:#ffffff;',
@@ -158,7 +162,7 @@
     // and out, where it can be seen.
     '  box-shadow:inset 0 0 0 1px var(--sfaf-accent),0 0 0 1px rgba(255,255,255,.4),0 2px 12px rgba(0,0,0,.28),',
     '    0 -4px 14px rgba(0,0,0,.16),0 8px 28px rgba(0,0,0,.18);',
-    '  transition:background var(--sfaf-quick) ease;}',
+    '  transition:background var(--sfaf-quick) var(--sfaf-soft);}',
     '#sfaf-chat .sfaf-launcher:hover{background:var(--sfaf-dark-hover);}',
     // Inset, because the page behind may be white and the bottom edge would clip it.
     '#sfaf-chat .sfaf-launcher:focus-visible{outline:2px solid var(--sfaf-focus-on-dark);outline-offset:-4px;}',
@@ -168,7 +172,7 @@
     // Its one motion plays once on load; JS ends it (sfaf-qmark-done) so reopening the
     // launcher doesn't replay it, and reduced motion turns it off with the rest.
     '#sfaf-chat .sfaf-launcher .sfaf-qmark{position:absolute;left:7px;top:-12px;width:32px;height:32px;overflow:visible;',
-    '  transition:transform .2s var(--sfaf-ease);}',
+    '  transition:transform var(--sfaf-quick) var(--sfaf-soft);}',
     '#sfaf-chat .sfaf-launcher .sfaf-qmark.sfaf-qmark-done{animation:none;}',
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{fill:var(--sfaf-accent);stroke:var(--sfaf-dark);stroke-linejoin:round;}',
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-q{fill:none;stroke:var(--sfaf-dark);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;}',
@@ -205,7 +209,7 @@
     '#sfaf-chat .sfaf-header button{display:inline-flex;align-items:center;gap:7px;height:36px;cursor:pointer;',
     '  border-radius:var(--sfaf-radius);',
     '  background:transparent;color:var(--sfaf-on-dark);border:1px solid transparent;font-size:13px;font-weight:500;',
-    '  transition:background var(--sfaf-quick) ease,color var(--sfaf-quick) ease,border-color var(--sfaf-quick) ease;}',
+    '  transition:background var(--sfaf-quick) var(--sfaf-soft),color var(--sfaf-quick) var(--sfaf-soft),border-color var(--sfaf-quick) var(--sfaf-soft);}',
     '#sfaf-chat .sfaf-header button:hover{background:var(--sfaf-dark-hover);}',
     '#sfaf-chat .sfaf-header button:focus-visible{outline-color:var(--sfaf-focus-on-dark);outline-offset:0;}',
     '#sfaf-chat .sfaf-header svg{width:18px;height:18px;flex:none;}',
@@ -226,16 +230,19 @@
     '  animation:sfaf-rise .34s var(--sfaf-ease) both;}',
     '@keyframes sfaf-rise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}',
     /*
-     * Message entrance (1.24.0): each bubble fades and slides in from its own side, goes
-     * about 2px past its place and settles back, in .3s. A slight overshoot, not a spring,
-     * in step with the launcher bubble's wave. Reduced motion removes it with the rest.
+     * Message entrance (1.24.0, springier 1.25.0): each bubble fades and slides in from its
+     * own side in .45s, goes about 5px past its place, swings 1.5px back the other way and
+     * settles. A small spring with a visible settle, not a bounce. Reduced motion removes it
+     * with the rest.
      */
-    '#sfaf-chat .sfaf-msg.sfaf-bot{transform-origin:0 100%;animation:sfaf-in-bot .3s cubic-bezier(.2,.75,.3,1) both;}',
-    '#sfaf-chat .sfaf-msg.sfaf-user{transform-origin:100% 100%;animation:sfaf-in-user .3s cubic-bezier(.2,.75,.3,1) both;}',
-    '@keyframes sfaf-in-bot{0%{opacity:0;transform:translate(-12px,6px) scale(.97);}',
-    '  60%{opacity:1;transform:translate(2px,-1px) scale(1.005);}100%{opacity:1;transform:none;}}',
-    '@keyframes sfaf-in-user{0%{opacity:0;transform:translate(12px,6px) scale(.97);}',
-    '  60%{opacity:1;transform:translate(-2px,-1px) scale(1.005);}100%{opacity:1;transform:none;}}',
+    '#sfaf-chat .sfaf-msg.sfaf-bot{transform-origin:0 100%;animation:sfaf-in-bot .45s cubic-bezier(.25,.7,.3,1) both;}',
+    '#sfaf-chat .sfaf-msg.sfaf-user{transform-origin:100% 100%;animation:sfaf-in-user .45s cubic-bezier(.25,.7,.3,1) both;}',
+    '@keyframes sfaf-in-bot{0%{opacity:0;transform:translate(-16px,8px) scale(.96);}',
+    '  50%{opacity:1;transform:translate(5px,-2px) scale(1.012);}',
+    '  76%{transform:translate(-1.5px,0) scale(.998);}100%{opacity:1;transform:none;}}',
+    '@keyframes sfaf-in-user{0%{opacity:0;transform:translate(16px,8px) scale(.96);}',
+    '  50%{opacity:1;transform:translate(-5px,-2px) scale(1.012);}',
+    '  76%{transform:translate(1.5px,0) scale(.998);}100%{opacity:1;transform:none;}}',
     '#sfaf-chat .sfaf-msg .sfaf-p{margin:0;}',
     // A fixed text color, like the error, so it stays readable whatever the bubble colors are.
     '#sfaf-chat .sfaf-msg .sfaf-p.sfaf-caution{background:var(--sfaf-caution-bg);border-left:3px solid var(--sfaf-caution-edge);',
@@ -296,21 +303,21 @@
     '  min-height:48px;padding:16px 56px 16px 24px;border:0;border-radius:var(--sfaf-radius);cursor:pointer;',
     '  background:var(--sfaf-flow-bg);color:var(--sfaf-flow-ink);box-shadow:var(--sfaf-btn-shadow);text-decoration:none;text-align:left;',
     '  font-family:var(--sfaf-font);font-weight:700;font-size:16px;line-height:16px;letter-spacing:.8px;',
-    '  text-transform:uppercase;transition:color var(--sfaf-swap) ease;}',
+    '  text-transform:uppercase;transition:color var(--sfaf-swap) var(--sfaf-soft);}',
     '#sfaf-chat .sfaf-flow-dark{--sfaf-flow-bg:var(--sfaf-dark);--sfaf-flow-ink:var(--sfaf-on-dark);',
     '  --sfaf-flow-fill:var(--sfaf-accent);--sfaf-flow-ink-on:var(--sfaf-on-accent);}',
     '#sfaf-chat .sfaf-flow-disc{position:absolute;left:50%;top:50%;z-index:-1;width:24px;height:24px;',
     '  margin:-12px 0 0 -12px;border-radius:50%;background:var(--sfaf-flow-fill);transform:scale(0);',
-    '  transition:transform var(--sfaf-glide) cubic-bezier(.23,1,.32,1);pointer-events:none;}',
+    '  transition:transform var(--sfaf-glide) var(--sfaf-soft);pointer-events:none;}',
     // inherit: the reset above sets letter-spacing and text-transform on every element.
     '#sfaf-chat .sfaf-flow-text{position:relative;letter-spacing:inherit;text-transform:inherit;',
-    '  transition:transform var(--sfaf-glide) cubic-bezier(.23,1,.32,1);}',
+    '  transition:transform var(--sfaf-glide) var(--sfaf-soft);}',
     // The arrow sits in a small round badge (1.21.0) in the text color, the arrow in the
     // button color, so the button says "go" at rest. The badge swaps with the button.
     '#sfaf-chat .sfaf-flow .sfaf-flow-a{position:absolute;top:50%;width:26px;height:26px;margin-top:-13px;padding:5px;',
     '  border-radius:50%;background:var(--sfaf-flow-ink);color:var(--sfaf-flow-bg);stroke-width:2.4;',
-    '  transition:left var(--sfaf-glide) cubic-bezier(.23,1,.32,1),right var(--sfaf-glide) cubic-bezier(.23,1,.32,1),',
-    '    background var(--sfaf-swap) ease,color var(--sfaf-swap) ease;}',
+    '  transition:left var(--sfaf-glide) var(--sfaf-soft),right var(--sfaf-glide) var(--sfaf-soft),',
+    '    background var(--sfaf-swap) var(--sfaf-soft),color var(--sfaf-swap) var(--sfaf-soft);}',
     '#sfaf-chat .sfaf-flow .sfaf-flow-in{left:-25%;}',
     '#sfaf-chat .sfaf-flow .sfaf-flow-out{right:18px;}',
     '#sfaf-chat .sfaf-flow:not([disabled]):hover .sfaf-flow-a,#sfaf-chat .sfaf-flow:not([disabled]):focus-visible .sfaf-flow-a{',
@@ -343,7 +350,7 @@
     '  text-align:left;cursor:pointer;background:transparent;color:var(--sfaf-text);',
     '  border:1px solid var(--sfaf-border);border-radius:var(--sfaf-radius);padding:10px 14px;font-size:14.5px;line-height:1.4;',
     '  animation:sfaf-rise .34s var(--sfaf-ease) both;',
-    '  transition:background var(--sfaf-quick) ease,border-color var(--sfaf-quick) ease;}',
+    '  transition:background var(--sfaf-quick) var(--sfaf-soft),border-color var(--sfaf-quick) var(--sfaf-soft);}',
     '#sfaf-chat .sfaf-starter:nth-child(2){animation-delay:.05s;}',
     '#sfaf-chat .sfaf-starter:nth-child(3){animation-delay:.1s;}',
     '#sfaf-chat .sfaf-starter:hover{background:var(--sfaf-surface);border-color:var(--sfaf-dark);}',
@@ -414,7 +421,7 @@
     '#sfaf-chat .sfaf-input:hover{border-color:#8f8c89;}',
     '#sfaf-chat .sfaf-input:focus{border-color:var(--sfaf-dark);outline:1px solid var(--sfaf-dark);outline-offset:-2px;}',
     '#sfaf-chat .sfaf-mic,#sfaf-chat .sfaf-send{flex:none;width:44px;height:44px;cursor:pointer;border-radius:var(--sfaf-radius);',
-    '  display:flex;align-items:center;justify-content:center;transition:background var(--sfaf-quick) ease,color var(--sfaf-quick) ease,border-color var(--sfaf-quick) ease;}',
+    '  display:flex;align-items:center;justify-content:center;transition:background var(--sfaf-quick) var(--sfaf-soft),color var(--sfaf-quick) var(--sfaf-soft),border-color var(--sfaf-quick) var(--sfaf-soft);}',
     '#sfaf-chat .sfaf-mic svg,#sfaf-chat .sfaf-send svg{width:20px;height:20px;}',
     '#sfaf-chat .sfaf-mic{background:var(--sfaf-surface);color:var(--sfaf-text);border:1px solid var(--sfaf-border);}',
     '#sfaf-chat .sfaf-mic:hover{border-color:var(--sfaf-dark);}',

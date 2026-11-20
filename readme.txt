@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.24.0
+Stable tag: 1.25.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,16 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.25.0 =
+* Chat messages come in more slowly (.45 seconds, was .3) with a little more spring: each
+  bubble goes a few pixels past its place, swings back slightly and settles. Still none
+  with the system's reduce-motion setting.
+* Button hovers are slower and gentler: the color swap takes .8 seconds (was .56), the
+  sliding fill and arrows 1 second (was .75), and the launcher, header buttons, suggested
+  questions, Send and the mic .32 seconds (was .2). All of them now share one soft curve
+  that eases in, where the old curves did most of the change at once and read as a snap.
+  None with reduce-motion.
 
 = 1.24.0 =
 * Report restyled in the SFAF brand: one large lead number (Questions asked) with the
