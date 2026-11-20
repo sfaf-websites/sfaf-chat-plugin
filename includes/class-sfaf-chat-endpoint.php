@@ -207,6 +207,11 @@ class SFAF_Chat_Endpoint {
             'callback'            => array( $this, 'track' ),
             'permission_callback' => '__return_true',
         ) );
+        register_rest_route( self::REST_NAMESPACE, '/speak', array(
+            'methods'             => 'POST',
+            'callback'            => array( $this, 'speak' ),
+            'permission_callback' => '__return_true',
+        ) );
         register_rest_route( self::REST_NAMESPACE, '/widget\.js', array(
             'methods'             => 'GET',
             'callback'            => array( $this, 'widget_placeholder' ),
@@ -270,7 +275,7 @@ class SFAF_Chat_Endpoint {
         do_action( 'litespeed_control_set_nocache', 'sfaf-chat' );
 
         // The routes the widget calls from another site. All get the CORS rules.
-        $is_called = in_array( $route, array( '/' . self::REST_NAMESPACE . '/ask', '/' . self::REST_NAMESPACE . '/starters', '/' . self::REST_NAMESPACE . '/contact', '/' . self::REST_NAMESPACE . '/track' ), true );
+        $is_called = in_array( $route, array( '/' . self::REST_NAMESPACE . '/ask', '/' . self::REST_NAMESPACE . '/starters', '/' . self::REST_NAMESPACE . '/contact', '/' . self::REST_NAMESPACE . '/track', '/' . self::REST_NAMESPACE . '/speak' ), true );
         $is_widget = '/' . self::REST_NAMESPACE . '/widget.js' === $route;
 
         if ( $is_called ) {
@@ -374,6 +379,25 @@ class SFAF_Chat_Endpoint {
         }
         SFAF_Chat_Stats::record_action( $type, $body['team'] ?? '', $body['sub'] ?? '', true === ( $body['first'] ?? null ) );
         return new WP_REST_Response( array( 'ok' => true ), 200 );
+    }
+
+    /* ================================= SPEAK ============================== */
+
+    /**
+     * Read aloud through Google Cloud Text-to-Speech (1.27.0): one part of an answer
+     * the chat signed, as audio. Same switch and origin rules as ask. Nothing is
+     * logged or kept. See SFAF_Chat_Voice.
+     */
+    public function speak( WP_REST_Request $request ) {
+        if ( ! SFAF_Chat_Settings::is_on() ) {
+            return $this->fail( 'The assistant is not available.', 403 );
+        }
+        if ( ! self::origin_allowed( get_http_origin() ) ) {
+            return $this->fail( 'Forbidden', 403 );
+        }
+        $body   = json_decode( (string) $request->get_body(), true );
+        $result = SFAF_Chat_Voice::speak( is_array( $body ) ? $body : array() );
+        return new WP_REST_Response( $result['body'], $result['status'] );
     }
 
     /* ================================== ASK =============================== */
@@ -1036,6 +1060,9 @@ class SFAF_Chat_Endpoint {
             // The conversation's category, so the widget can credit an action to it and
             // tell the next question what this conversation has covered (1.23.0).
             'cat'      => array( 'team' => $report_team, 'sub' => $report_sub ),
+            // Read aloud (1.27.0): a signature over this answer, so /speak voices only
+            // what the chat said. Null while no Text-to-Speech key is set.
+            'speech'   => SFAF_Chat_Voice::token( $answer ),
         ), 200 );
     }
 

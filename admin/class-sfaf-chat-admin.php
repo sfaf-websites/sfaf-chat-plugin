@@ -23,6 +23,8 @@ class SFAF_Chat_Admin {
     const SAVE_ACTION  = 'sfaf_chat_save_settings';
     const PIN_ACTION   = 'sfaf_chat_save_pin';
     const UNPIN_ACTION = 'sfaf_chat_delete_pin';
+    const VOICES_ACTION  = 'sfaf_chat_check_voices';
+    const PREVIEW_ACTION = 'sfaf_chat_voice_preview';
 
     /** One-screen messages, carried across the redirect after a save. */
     const NOTICE_TRANSIENT = 'sfaf_chat_notice_';
@@ -50,6 +52,8 @@ class SFAF_Chat_Admin {
 
         add_action( 'admin_post_' . self::SPECIAL_ACTION, array( $this, 'save_special' ) );
         add_action( 'admin_post_' . self::MODELS_ACTION, array( $this, 'check_models' ) );
+        add_action( 'admin_post_' . self::VOICES_ACTION, array( $this, 'check_voices' ) );
+        add_action( 'wp_ajax_' . self::PREVIEW_ACTION, array( $this, 'preview_voice' ) );
         add_action( 'admin_menu', array( $this, 'menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
         add_action( 'admin_post_' . self::SAVE_ACTION, array( $this, 'save_settings' ) );
@@ -79,7 +83,8 @@ class SFAF_Chat_Admin {
         wp_enqueue_style( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/css/admin.css', array(), SFAF_CHAT_VERSION );
 
         $is_appearance = false !== strpos( (string) $hook, SFAF_Chat_Admin_Appearance::PAGE );
-        if ( $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Contact::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Report::PAGE ) ) {
+        $is_general = 'toplevel_page_' . self::MENU === (string) $hook;
+        if ( $is_general || $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Contact::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Report::PAGE ) ) {
             wp_enqueue_script( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/js/admin.js', array(), SFAF_CHAT_VERSION, true );
             wp_add_inline_script( 'sfaf-chat-admin', 'window.sfafChatAdmin=' . wp_json_encode( array( 'pairs' => SFAF_Chat_Appearance::PAIRS ) ) . ';', 'before' );
         }
@@ -155,7 +160,9 @@ class SFAF_Chat_Admin {
             'api_key'     => $post['api_key'] ?? '',
             'index_token' => $post['index_token'] ?? '',
             'model'       => $post['model'] ?? '',
+            'tts_key'     => $post['tts_key'] ?? '',
         ) );
+        $problems = array_merge( $problems, SFAF_Chat_Voice::save( $post['voice_en'] ?? '', $post['voice_es'] ?? '' ) );
 
         $mode = SFAF_Chat_Settings::MODE_ON === ( $post['mode'] ?? '' )
             ? SFAF_Chat_Settings::MODE_ON
@@ -191,6 +198,113 @@ class SFAF_Chat_Admin {
 
         wp_safe_redirect( admin_url( 'admin.php?page=' . self::MENU ) );
         exit;
+    }
+
+    /** Read Google's voice list again, now. */
+    public function check_voices() {
+        $this->gate();
+        check_admin_referer( self::VOICES_ACTION );
+
+        $list = SFAF_Chat_Voice::voice_list( true );
+        if ( '' !== $list['error'] ) {
+            $this->stash_notice( array( 'The voice list was not updated. ' . $list['error'] ), 'warning' );
+        } else {
+            $this->stash_notice( array( sprintf( 'Voice list updated: %d voices.', count( $list['voices'] ) ) ), 'success' );
+        }
+        wp_safe_redirect( admin_url( 'admin.php?page=' . self::MENU ) );
+        exit;
+    }
+
+    /** Preview: the sample, as base64 MP3. Never the key, and nothing kept. */
+    public function preview_voice() {
+        if ( ! current_user_can( self::CAP ) ) {
+            wp_send_json( array( 'ok' => false, 'message' => 'You do not have permission to do this.' ), 403 );
+        }
+        check_ajax_referer( self::PREVIEW_ACTION );
+        if ( ! SFAF_Chat_Voice::ready() ) {
+            wp_send_json( array( 'ok' => false, 'message' => 'Save a Text-to-Speech key first.' ), 400 );
+        }
+        $audio = SFAF_Chat_Voice::preview( wp_unslash( (string) ( $_POST['voice'] ?? '' ) ) );
+        if ( null === $audio ) {
+            wp_send_json( array( 'ok' => false, 'message' => 'Google did not return audio for that voice. Check the key and try another voice.' ), 502 );
+        }
+        wp_send_json( array( 'ok' => true, 'audio' => $audio, 'type' => 'audio/mpeg' ) );
+    }
+
+    /** The voice section of the General screen. */
+    private function render_voice() {
+        $ready  = SFAF_Chat_Voice::ready();
+        $source = SFAF_Chat_Voice::key_source();
+        $list   = SFAF_Chat_Voice::voice_list();
+        $names  = array( 'en' => 'English voice', 'es' => 'Spanish voice' );
+        ?>
+        <h2>Read aloud voice</h2>
+        <p class="description">With a Google Cloud Text-to-Speech key, Read aloud speaks with Google's voices. Without one, or whenever Google fails, it uses the visitor's browser voice, as before. The reply text is sent to Google to be spoken; nothing else is, and nothing is kept.</p>
+        <table class="form-table" role="presentation">
+            <tr>
+                <th scope="row"><label for="sfaf-chat-tts-key">Text-to-Speech API key</label></th>
+                <td>
+                    <input type="password" id="sfaf-chat-tts-key" name="tts_key" class="regular-text" value="" autocomplete="new-password">
+                    <p class="description"><?php
+                    if ( 'settings' === $source ) {
+                        echo 'A key is saved. Leave this blank to keep it, or type a new key to replace it.';
+                    } elseif ( 'config' === $source ) {
+                        echo 'A key is set in config.php outside the web root. A key typed here takes its place.';
+                    } else {
+                        echo 'No key saved yet, so Read aloud uses the browser voice.';
+                    }
+                    ?> The saved key is never shown here. This is not the Gemini key.</p>
+                </td>
+            </tr>
+            <?php foreach ( $names as $lang => $label ) :
+                $current = SFAF_Chat_Voice::voice_for( $lang );
+                $options = array_values( array_filter( $list['voices'], function ( $v ) use ( $lang ) { return $v['lang'] === $lang; } ) );
+                $listed  = in_array( $current, array_column( $options, 'name' ), true );
+                ?>
+            <tr>
+                <th scope="row"><label for="sfaf-chat-voice-<?php echo esc_attr( $lang ); ?>"><?php echo esc_html( $label ); ?></label></th>
+                <td>
+                    <select id="sfaf-chat-voice-<?php echo esc_attr( $lang ); ?>" name="voice_<?php echo esc_attr( $lang ); ?>" class="sfaf-voice-select"<?php disabled( ! $ready ); ?>>
+                        <?php
+                        if ( ! $listed ) {
+                            printf( '<option value="%s" selected>%s</option>', esc_attr( $current ), esc_html( $current . ' (' . SFAF_Chat_Voice::type_of( $current ) . ( $options ? ', not in the list' : '' ) . ')' ) );
+                        }
+                        $group = '';
+                        foreach ( $options as $v ) {
+                            if ( 'es' === $lang && $v['locale'] !== $group ) {
+                                echo '' !== $group ? '</optgroup>' : '';
+                                $group = $v['locale'];
+                                printf( '<optgroup label="%s">', esc_attr( 'es-US' === $group ? 'Spanish (US)' : 'Spanish (Spain)' ) );
+                            }
+                            printf( '<option value="%s"%s>%s</option>', esc_attr( $v['name'] ), selected( $current, $v['name'], false ),
+                                esc_html( $v['name'] . ' (' . $v['type'] . ( '' !== $v['gender'] ? ', ' . $v['gender'] : '' ) . ')' ) );
+                        }
+                        echo '' !== $group ? '</optgroup>' : '';
+                        ?>
+                    </select>
+                    <button type="button" class="button sfaf-voice-preview" data-for="sfaf-chat-voice-<?php echo esc_attr( $lang ); ?>"<?php disabled( ! $ready ); ?>>Preview</button>
+                    <span class="sfaf-voice-status" aria-live="polite"></span>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+            <tr>
+                <th scope="row">Voice list</th>
+                <td>
+                    <?php if ( ! $ready ) : ?>
+                        <p class="description">The voices need a Text-to-Speech key. Save one, and the list loads from Google.</p>
+                    <?php else : ?>
+                        <button type="submit" form="sfaf-chat-check-voices" class="button">Refresh voices</button>
+                        <p class="description"><?php
+                        if ( '' !== $list['error'] ) {
+                            echo esc_html( 'Could not load the voices. ' . $list['error'] . ' ' );
+                        }
+                        echo $list['checked'] ? esc_html( sprintf( '%d voices, from Google %s Pacific.', count( $list['voices'] ), wp_date( 'M j, g:i a', $list['checked'], SFAF_Chat_Core::timezone() ) ) ) : 'Not loaded yet.';
+                        ?> English (US), and Spanish (US and Spain). Chirp 3: HD is the default. Spanish replies use the Spanish voice, replies in other languages the browser voice.</p>
+                    <?php endif; ?>
+                </td>
+            </tr>
+        </table>
+        <?php
     }
 
     public function render_settings() {
@@ -260,6 +374,8 @@ class SFAF_Chat_Admin {
                     </tr>
                 </table>
 
+                <?php $this->render_voice(); ?>
+
                 <h2>Logging</h2>
                 <p><label><input type="checkbox" name="raw_questions" value="1" <?php checked( ! empty( $settings['raw_questions'] ) ); ?>>
                     Log raw question and answer text, to review full exchanges on the Dashboard. For internal testing only. It records every question asked on any page with the script tag, and the assistant's answer, so turn it off before the tag goes on a page real visitors can reach. Still no IP address, user or session; rows are deleted after 60 days.</label></p>
@@ -271,6 +387,12 @@ class SFAF_Chat_Admin {
                 <input type="hidden" name="action" value="<?php echo esc_attr( self::MODELS_ACTION ); ?>">
                 <?php wp_nonce_field( self::MODELS_ACTION ); ?>
             </form>
+
+            <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="sfaf-chat-check-voices">
+                <input type="hidden" name="action" value="<?php echo esc_attr( self::VOICES_ACTION ); ?>">
+                <?php wp_nonce_field( self::VOICES_ACTION ); ?>
+            </form>
+            <div id="sfaf-voice-preview-config" hidden data-ajax="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( self::PREVIEW_ACTION ) ); ?>" data-action="<?php echo esc_attr( self::PREVIEW_ACTION ); ?>"></div>
 
             <h2>Status</h2>
             <?php $this->render_status(); ?>
@@ -288,6 +410,8 @@ class SFAF_Chat_Admin {
             'Version'             => SFAF_CHAT_VERSION,
             'API key saved'       => $yes( SFAF_Chat_Credentials::has( 'api_key' ) ),
             'Model'               => SFAF_Chat_Credentials::model(),
+            'Text-to-Speech key'  => array( 'settings' => 'Yes, saved here', 'config' => 'Yes, in config.php', '' => 'No (browser voice)' )[ SFAF_Chat_Voice::key_source() ],
+            'Read aloud voices'   => SFAF_Chat_Voice::ready() ? SFAF_Chat_Voice::voice_for( 'en' ) . ', ' . SFAF_Chat_Voice::voice_for( 'es' ) : 'Browser voice',
             'System prompt found' => $yes( is_readable( SFAF_Chat_Core::prompt_path() ) ),
             'Knowledge entries'   => (string) count( SFAF_Chat_Core::kb_entries() ),
             'Pinned answers'      => (string) count( SFAF_Chat_Pinned::all() ),

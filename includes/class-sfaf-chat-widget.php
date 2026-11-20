@@ -41,6 +41,8 @@ class SFAF_Chat_Widget {
             // Hosts whose web addresses in a reply may be links (1.21.0). Any other
             // address stays plain text. See SFAF_Chat_Link_Domains.
             'links'    => SFAF_Chat_Link_Domains::linkable_hosts(),
+            // Read aloud can use Google's voices (1.27.0). Whether, never the key.
+            'voice'    => SFAF_Chat_Voice::ready(),
         );
     }
 

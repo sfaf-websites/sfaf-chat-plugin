@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.25.0
+Stable tag: 1.27.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,30 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.27.0 =
+* Read aloud can speak with Google Cloud Text-to-Speech voices instead of the browser's.
+  It needs its own key (General > Read aloud voice), separate from the Gemini key and
+  handled the same way: write-only, not autoloaded, never shown. It can also come from
+  tts_api_key in a config.php outside the web root, named in wp-config.php with
+  define( 'SFAF_CHAT_CONFIG', '<full path>' ). With no key, Read aloud
+  uses the browser voice exactly as before.
+* English and Spanish voices are chosen from Google's live list (English US, Spanish US
+  and Spain), with name and type shown, Chirp 3: HD by default, and a Preview button.
+* Spanish replies use the Spanish voice, other replies the English voice, and replies in
+  any other language the browser voice. Long replies are spoken in sentence-sized parts,
+  played in order, the next fetched while the current one plays. Any error, timeout or
+  refusal falls back to the browser voice without showing anything to the visitor.
+* New route /speak, with the same switch, origin and CORS rules as the chat. It speaks
+  only replies the chat itself produced and signed (a token in each reply, good for 3
+  hours), at most 4,000 characters, and is rate limited: 40 parts per visitor and 400 in
+  all per 10 minutes. The visitor is counted by a keyed hash of the IP address, held for
+  10 minutes only, never logged and never sent to Google. Nothing is stored and no audio
+  is cached.
+* PRIVACY POLICY: when the key is set and a visitor turns on Read aloud, the text of the
+  chat's replies is sent to Google Cloud Text-to-Speech to be turned into speech. Nothing
+  else goes to Google: no IP address, page, session or other identifier.
+* The ask reply has a new key, speech (the token, or null without a key).
 
 = 1.25.0 =
 * Chat messages come in more slowly (.45 seconds, was .3) with a little more spring: each

@@ -326,8 +326,43 @@
     });
   }
 
+  /* ============================ VOICE PREVIEW ============================ */
+  // General screen (1.27.0): plays a short sample in the chosen voice. The server
+  // calls Google; this only plays what comes back. Nothing is saved.
+  function initVoice() {
+    var cfg = document.getElementById('sfaf-voice-preview-config');
+    if (!cfg) return;
+    var player = null;
+    Array.prototype.forEach.call(document.querySelectorAll('.sfaf-voice-preview'), function (btn) {
+      var status = btn.parentNode.querySelector('.sfaf-voice-status');
+      btn.addEventListener('click', function () {
+        var select = document.getElementById(btn.getAttribute('data-for'));
+        if (!select || !select.value) return;
+        if (player) { player.pause(); player = null; }
+        btn.disabled = true;
+        status.textContent = 'Loading...';
+        var body = new FormData();
+        body.append('action', cfg.getAttribute('data-action'));
+        body.append('_ajax_nonce', cfg.getAttribute('data-nonce'));
+        body.append('voice', select.value);
+        fetch(cfg.getAttribute('data-ajax'), { method: 'POST', body: body, credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d || !d.ok || typeof d.audio !== 'string') throw new Error((d && d.message) || 'No audio.');
+            player = new Audio('data:' + (d.type || 'audio/mpeg') + ';base64,' + d.audio);
+            status.textContent = 'Playing.';
+            player.onended = function () { status.textContent = ''; };
+            return player.play();
+          })
+          .catch(function (e) { status.textContent = (e && e.message) || 'Could not play the sample.'; })
+          .then(function () { btn.disabled = false; });
+      });
+    });
+  }
+
   initAppearance();
   initQuestions();
   initTeams();
   initReport();
+  initVoice();
 })();

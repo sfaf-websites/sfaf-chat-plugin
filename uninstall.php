@@ -32,9 +32,14 @@ foreach ( array(
     'sfaf_chat_contact',
     'sfaf_chat_installed_version',
     'sfaf_chat_stats_since',
+    'sfaf_chat_voice',
+    'sfaf_chat_voices',
 ) as $sfaf_chat_option ) {
     delete_option( $sfaf_chat_option );
 }
+
+// Read aloud's ten-minute counts, which would expire by themselves anyway.
+$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '\\_transient\\_sfaf\\_chat\\_voice\\_r%' OR option_name LIKE '\\_transient\\_timeout\\_sfaf\\_chat\\_voice\\_r%'" );
 
 delete_site_transient( 'sfaf_chat_updater_release' );
 wp_clear_scheduled_hook( 'sfaf_chat_prune_logs' );

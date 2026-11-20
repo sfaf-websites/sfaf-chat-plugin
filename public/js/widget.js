@@ -8,9 +8,13 @@
  * Self-contained: no dependencies, no CDN, no cookies, no storage. The thread
  * lives only in memory and is cleared when the panel closes.
  *
- * Voice uses the browser's own speech features. This code never touches audio and
- * sends none to SFAF or Gemini. Only the resulting text goes anywhere, and only
- * when the visitor presses Send.
+ * Voice input uses the browser's own speech recognition. This code never records
+ * audio and sends none to SFAF or Gemini. Only the resulting text goes anywhere, and
+ * only when the visitor presses Send.
+ *
+ * Read aloud (1.27.0): when the plugin has a Google Text-to-Speech key, the reply the
+ * chat signed goes to /speak on resources.sfaf.org, which returns MP3 parts to play.
+ * Any failure, and every reply without a token, uses the browser's voice instead.
  *
  * All server text is inserted with textContent, never innerHTML, so nothing
  * the proxy returns can inject markup into the host page.
@@ -35,6 +39,9 @@
   var STARTERS_URL = PROXY_URL.replace(/\/ask$/, '/starters');
   var CONTACT_URL = PROXY_URL.replace(/\/ask$/, '/contact');
   var TRACK_URL = PROXY_URL.replace(/\/ask$/, '/track');
+  var SPEAK_URL = PROXY_URL.replace(/\/ask$/, '/speak');
+  // Google's voice must answer this soon, or the browser's voice reads instead.
+  var SPEAK_TIMEOUT_MS = 15000;
 
   // Prior messages sent with each question.
   // KEEP EQUAL TO MAX_HISTORY_TURNS IN includes/class-sfaf-chat-endpoint.php.
@@ -563,6 +570,9 @@
 
   var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
   var canSpeak = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+  // Google's voices through the plugin (1.27.0): only when it has a key and can play.
+  var cloudVoice = CONFIG.voice === true && typeof window.Audio === 'function' &&
+    !!(window.URL && URL.createObjectURL) && typeof window.Blob === 'function';
 
   // Touch screens: moving focus to the input pops up the keyboard over the starters.
   var coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
@@ -606,9 +616,9 @@
   closeBtn.appendChild(svg(ICON_CLOSE));
   header.appendChild(title);
 
-  // No browser speech synthesis, no control: there is nothing to offer.
+  // No voice of either kind, no control: there is nothing to offer.
   var readBtn = null;
-  if (canSpeak) {
+  if (canSpeak || cloudVoice) {
     readBtn = el('button', 'sfaf-read');
     readBtn.type = 'button';
     readBtn.title = 'Read answers aloud. Press again to stop.';
@@ -1227,6 +1237,8 @@
     asked = true;
     stopListening(true);
     stopSpeaking();
+    // A Send or a starter tap is the gesture iOS wants before audio may play later.
+    if (readingOn) unlockAudio(false);
     removeStarters();
     clearNote();
     addBubble('user', question);
@@ -1273,7 +1285,7 @@
         // Only completed exchanges enter the thread.
         thread.push({ role: 'user', text: question });
         thread.push({ role: 'assistant', text: data.answer });
-        spokenAnswer(data.answer);
+        spokenAnswer(data.answer, typeof data.speech === 'string' ? data.speech : '');
       })
       .catch(function () {
         if (mySession !== session) return;
@@ -1555,15 +1567,30 @@
       .trim();
   }
 
-  function stopSpeaking() {
+  var lastSpeech = '';      // the server's token for lastAnswer, or ''
+  var speakRun = 0;         // bumped by every stop, so a late part never plays
+  var player = null;        // one audio element, reused, so iOS keeps it unlocked
+  var playerUnlocked = false;
+  var silence = null;
+
+  function stopBrowserVoice() {
     if (!canSpeak) return;
     window.speechSynthesis.cancel();
     utterances = [];
   }
 
-  function speak(text) {
+  function stopSpeaking() {
+    speakRun++;
+    if (player) {
+      player.onended = player.onerror = null;
+      try { player.pause(); } catch (e) {}
+    }
+    stopBrowserVoice();
+  }
+
+  function browserSpeak(text) {
     if (!canSpeak) return;
-    stopSpeaking();
+    stopBrowserVoice();
     // A sentence at a time: Chrome can stop dead partway through one long utterance.
     (speakable(text).match(/[^.!?]+(?:[.!?]+(?=\s|$)|$)|[.!?]+/g) || []).forEach(function (part) {
       var u = new window.SpeechSynthesisUtterance(part.trim());
@@ -1573,9 +1600,102 @@
     });
   }
 
-  function spokenAnswer(text) {
+  // A tenth of a second of silence, as a WAV built here: what unlocks the element.
+  function silentUrl() {
+    if (silence) return silence;
+    var n = 800, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    var put = function (o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    put(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); put(8, 'WAVEfmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    put(36, 'data'); v.setUint32(40, n * 2, true);
+    silence = URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    return silence;
+  }
+
+  // Called from a tap or a Send. iOS lets an element play later only once it has
+  // played during a gesture; the browser voice wants the same (withVoice), which is
+  // only needed when nothing is about to be read straight away.
+  function unlockAudio(withVoice) {
+    if (cloudVoice && !playerUnlocked) {
+      try {
+        player = player || new window.Audio();
+        player.src = silentUrl();
+        var p = player.play();
+        if (p && p.then) p.then(function () { playerUnlocked = true; }, function () {});
+      } catch (e) {}
+    }
+    if (canSpeak && withVoice) {
+      var u = new window.SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+    }
+  }
+
+  function audioUrl(b64, type) {
+    try {
+      var bin = window.atob(b64), bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return URL.createObjectURL(new Blob([bytes], { type: type || 'audio/mpeg' }));
+    } catch (e) { return null; }
+  }
+
+  // One part from the server, or a rejection: any error, refusal or timeout.
+  function fetchPart(text, token, i) {
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, SPEAK_TIMEOUT_MS);
+    return fetch(SPEAK_URL, requestOptions({ text: text, token: token, part: i }, ctrl ? ctrl.signal : undefined))
+      .then(function (res) { return res.json(); })
+      .then(function (d) {
+        clearTimeout(timer);
+        if (!d || d.ok !== true || typeof d.audio !== 'string' || typeof d.parts !== 'number') throw new Error('no audio');
+        return d;
+      }, function (e) { clearTimeout(timer); throw e; });
+  }
+
+  // Google's voice, part by part, the next one fetched while this one plays. On any
+  // failure the browser's voice reads whatever is left, and the visitor sees nothing.
+  function cloudSpeak(text, token) {
+    var run = speakRun;
+    var texts = null;
+    function fallback(from) {
+      if (run !== speakRun) return;
+      speakRun++;
+      if (player) { player.onended = player.onerror = null; try { player.pause(); } catch (e) {} }
+      browserSpeak(texts ? texts.slice(from).join(' ') : text);
+    }
+    function play(i, pending) {
+      pending.then(function (d) {
+        if (run !== speakRun) return;
+        if (Array.isArray(d.texts)) texts = d.texts;
+        var next = i + 1 < d.parts ? fetchPart(text, token, i + 1) : null;
+        if (next) next.catch(function () {});
+        var url = audioUrl(d.audio, d.type);
+        if (!url) { fallback(i); return; }
+        player = player || new window.Audio();
+        player.onended = function () {
+          URL.revokeObjectURL(url);
+          if (run === speakRun && next) play(i + 1, next);
+        };
+        player.onerror = function () { URL.revokeObjectURL(url); fallback(i); };
+        player.src = url;
+        var p = player.play();
+        if (p && p.catch) p.catch(function () { fallback(i); });
+      }, function () { fallback(i); });
+    }
+    play(0, fetchPart(text, token, 0));
+  }
+
+  function speak(text, token) {
+    stopSpeaking();
+    if (cloudVoice && token) cloudSpeak(text, token);
+    else browserSpeak(text);
+  }
+
+  function spokenAnswer(text, token) {
     lastAnswer = text;
-    if (readingOn) speak(text);
+    lastSpeech = token || '';
+    if (readingOn) speak(text, lastSpeech);
   }
 
   if (readBtn) {
@@ -1583,12 +1703,9 @@
       readingOn = !readingOn;
       readBtn.setAttribute('aria-pressed', readingOn ? 'true' : 'false');
       if (!readingOn) { stopSpeaking(); return; }
-      if (lastAnswer) { speak(lastAnswer); return; }
-      // iOS only allows speech that follows a tap, and answers arrive later. A silent
-      // utterance here is what unlocks them.
-      var unlock = new window.SpeechSynthesisUtterance(' ');
-      unlock.volume = 0;
-      window.speechSynthesis.speak(unlock);
+      // iOS only allows speech that follows a tap, and answers arrive later.
+      unlockAudio(!lastAnswer);
+      if (lastAnswer) speak(lastAnswer, lastSpeech);
     });
     window.addEventListener('pagehide', stopSpeaking);
   }
@@ -1621,6 +1738,7 @@
     apptAt = 0;
     asked = false;
     lastAnswer = '';
+    lastSpeech = '';
     noteEl = null;
     startersEl = null;
     alertsEl = null;

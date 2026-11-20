@@ -48,6 +48,9 @@ class SFAF_Chat_Credentials {
             'model'       => 'text',
             // The contact form's own Postmark server token. Not the calendar's.
             'postmark_token' => 'secret',
+            // Google Cloud Text-to-Speech, for Read aloud (1.27.0). Its own key, never
+            // the Gemini one. See SFAF_Chat_Voice.
+            'tts_key'        => 'secret',
         );
     }
 
