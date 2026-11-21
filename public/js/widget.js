@@ -350,6 +350,10 @@
     '#sfaf-chat .sfaf-alert-kind span{letter-spacing:inherit;text-transform:inherit;}',
     '#sfaf-chat .sfaf-alert p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;}',
     '#sfaf-chat .sfaf-alert p+p{margin-top:6px;}',
+    // Its one link (1.28.0): underlined, bold, in the notice's own text color.
+    '#sfaf-chat .sfaf-alert a.sfaf-alert-link{color:var(--sfaf-on-accent);font-weight:800;text-decoration:underline;',
+    '  text-decoration-thickness:2px;text-underline-offset:3px;overflow-wrap:anywhere;}',
+    '#sfaf-chat .sfaf-alert a.sfaf-alert-link:focus-visible{outline:2px solid var(--sfaf-on-accent);outline-offset:2px;}',
 
     // Starter questions
     '#sfaf-chat .sfaf-starters{display:flex;flex-direction:column;align-items:stretch;gap:8px;max-width:84%;}',
@@ -1101,6 +1105,23 @@
     messages.appendChild(startersEl);
   }
 
+  // An alert's one link (1.28.0). Staff wrote it on the Welcome & Alerts screen, so it
+  // is shown as given and does NOT pass through LINK_HOSTS, which holds the model's
+  // replies to approved hosts. That exception is this function's only. The scheme is
+  // still checked, as the server did: http(s), mailto: or tel:, never script.
+  function alertLink(link) {
+    if (!link || typeof link.url !== 'string' || typeof link.label !== 'string') return null;
+    var url = link.url.trim();
+    if (!/^(https?:\/\/[^\s<>"]+|mailto:[^\s<>"]+|tel:[0-9+().\-]+)$/i.test(url)) return null;
+    var a = el('a', 'sfaf-alert-link', link.label.trim() || url);
+    a.href = url;
+    if (/^https?:/i.test(url)) {
+      a.target = '_blank';
+      a.rel = 'noopener';
+    }
+    return a;
+  }
+
   // Active staff alerts ("Closed today due to weather"), first in the conversation,
   // above the greeting. Text only, through textContent like everything else.
   function showAlerts(list) {
@@ -1113,7 +1134,15 @@
     kind.appendChild(svg(ICON_NOTICE));
     kind.appendChild(el('span', null, list.length > 1 ? 'Notices' : 'Notice'));
     alertsEl.appendChild(kind);
-    list.forEach(function (t) { alertsEl.appendChild(el('p', null, t)); });
+    list.forEach(function (item) {
+      var p = el('p', null, item.text);
+      var a = alertLink(item.link);
+      if (a) {
+        p.appendChild(document.createTextNode(' '));
+        p.appendChild(a);
+      }
+      alertsEl.appendChild(p);
+    });
     messages.insertBefore(alertsEl, messages.firstChild);
   }
 
@@ -1135,8 +1164,8 @@
         var got = {
           questions: data.questions.filter(function (q) { return typeof q === 'string' && q; }),
           alerts: (Array.isArray(data.alerts) ? data.alerts : [])
-            .map(function (a) { return a && typeof a.text === 'string' ? a.text.trim() : ''; })
-            .filter(function (t) { return t; })
+            .map(function (a) { return a && typeof a.text === 'string' && a.text.trim() ? { text: a.text.trim(), link: a.link || null } : null; })
+            .filter(function (a) { return a; })
             .slice(0, 5)
         };
         startersCache[page] = got;
@@ -1250,7 +1279,7 @@
     var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, REQUEST_TIMEOUT_MS);
 
     fetch(PROXY_URL, requestOptions(
-      // The page goes along for routing "Contact our team" and for the Dashboard:
+      // The page goes along for routing "Contact our team" and for the Insights screen:
       // origin and path only, never the query or fragment.
       { question: question, history: history, scope: SCOPE, page: pageAddress(), seen: seenCats.slice() },
       ctrl ? ctrl.signal : undefined

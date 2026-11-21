@@ -1,24 +1,39 @@
 <?php
 /**
- * The Report screen (1.23.0): a monthly insights report for the team meeting, from
- * SFAF_Chat_Stats. All teams or one, for a date range: what people asked about
- * (demand), where the chat struggled (gaps), and what they did next (actions).
- * Print / Save as PDF prints the report alone (admin.css, @media print).
+ * Insights (1.28.0): the one screen for what the chat is doing. It joins the Report
+ * (1.23.0, restyled 1.24.0) and the Dashboard (1.0), which overlapped, and keeps
+ * everything either showed, once.
  *
- * Below the report, for staff only and never printed: the backfill that sorts
- * questions logged before 1.23.0, and Reset, which empties the report before launch.
+ * Two sources, one date range and one team filter:
+ *   - The insights report, from SFAF_Chat_Stats (kept 400 days): demand, gaps, actions
+ *     and conversion, by team or subject. Counts only.
+ *   - The question log, SFAF_Chat_Log (kept 60 days): pinned answers, crisis handoffs,
+ *     system errors, topics, hours, pages. With a team chosen, only the questions the
+ *     report sorted to it (through log_id).
  *
- * Counts only. Nothing here shows a question, a name or any contact detail.
+ * What prints (Print / Save as PDF, admin.css @media print) is #sfaf-report: counts
+ * only, nothing that can be traced to a person. Below it, on screen only, for staff:
+ * the unanswered queue and recent exchanges (question text, while raw logging is on),
+ * then Sort earlier questions and Reset.
+ *
+ * WHAT WAS A DUPLICATE AND WENT: the Dashboard's Questions and Answered tiles (the
+ * report's Questions asked and Answered well), and its Unanswered tile and the personal
+ * advice and off-topic declines (the report's "Why" under Where the chat struggled).
+ * Kept from the Dashboard because the report had no equivalent: pinned answers, crisis
+ * handoffs, system errors, topics, hours, pages, the queue and the exchanges, and its
+ * 7 and 60 day ranges (now presets).
+ *
  * Administrators only, checked in the menu and again in every handler.
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-class SFAF_Chat_Admin_Report {
+class SFAF_Chat_Admin_Insights {
 
-    const PAGE            = 'sfaf-chat-report';
+    const PAGE            = 'sfaf-chat-insights';
     const PURGE_ACTION    = 'sfaf_chat_purge_stats';
     const BACKFILL_ACTION = 'sfaf_chat_backfill';
-    const BACKFILL_BUDGET = 25;   // seconds of batches per press without JavaScript
+    const BACKFILL_BUDGET = 25;    // seconds of batches per press without JavaScript
+    const LIST_MAX        = 200;   // rows in the queue and the exchanges
 
     private $admin;
 
@@ -80,7 +95,7 @@ class SFAF_Chat_Admin_Report {
         wp_send_json( array( 'ok' => '' === $r['error'], 'done' => $r['done'], 'left' => $r['left'], 'error' => $r['error'] ) );
     }
 
-    /* ============================== RENDER ============================= */
+    /* =============================== HELPERS =========================== */
 
     /** A Y-m-d from the address bar, or the default. */
     private static function day( $key, $default ) {
@@ -95,6 +110,15 @@ class SFAF_Chat_Admin_Report {
 
     private static function pct( $n, $of ) {
         return $of > 0 ? round( 100 * $n / $of ) . '%' : '0%';
+    }
+
+    private static function hour_label( $h ) {
+        return ( 0 === $h % 12 ? 12 : $h % 12 ) . ( $h < 12 ? ' am' : ' pm' );
+    }
+
+    /** "www.sfaf.org/strut/": the host and path, without the scheme. */
+    private static function page_label( $url ) {
+        return (string) preg_replace( '#^https?://#i', '', $url );
     }
 
     /**
@@ -123,6 +147,79 @@ class SFAF_Chat_Admin_Report {
         echo '</ol>';
     }
 
+    /**
+     * The question log for the range, counted here, in PHP. API and parse errors are
+     * system failures, not visitor questions, so they are counted apart.
+     */
+    private static function log_counts( array $rows ) {
+        $tz  = SFAF_Chat_Core::timezone();
+        $utc = new DateTimeZone( 'UTC' );
+        $c   = array(
+            'rows' => count( $rows ), 'total' => 0, 'errors' => 0, 'pinned' => 0, 'crisis' => 0,
+            'topics' => array(), 'hours' => array_fill( 0, 24, 0 ), 'pages' => array(),
+            'queue' => array(), 'exchanges' => array(), 'raw' => false,
+        );
+        foreach ( $rows as $r ) {
+            $flag       = $r['flag'] ?? null;
+            $r['_when'] = ( new DateTimeImmutable( (string) $r['ts'], $utc ) )->setTimezone( $tz );
+            if ( null !== ( $r['question'] ?? null ) ) {
+                $c['raw']         = true;
+                $c['exchanges'][] = $r;
+            }
+            if ( 'api_error' === $flag || 'parse_error' === $flag ) {
+                $c['errors']++;
+                continue;
+            }
+            $c['total']++;
+            if ( ! empty( $r['page'] ) ) {
+                $c['pages'][ self::page_label( (string) $r['page'] ) ] = ( $c['pages'][ self::page_label( (string) $r['page'] ) ] ?? 0 ) + 1;
+            }
+            $topic = is_string( $r['topic'] ?? null ) && '' !== $r['topic'] ? $r['topic'] : 'other';
+            $c['topics'][ $topic ] = ( $c['topics'][ $topic ] ?? 0 ) + 1;
+            $c['hours'][ (int) $r['_when']->format( 'G' ) ]++;
+            if ( ! empty( $r['pin'] ) ) {
+                $c['pinned']++;
+            }
+            if ( 'crisis' === $flag ) {
+                $c['crisis']++;
+            }
+            if ( 'unanswered' === $flag ) {
+                $c['queue'][] = $r;
+            }
+        }
+        arsort( $c['topics'] );
+        arsort( $c['pages'] );
+        $c['queue']     = array_slice( array_reverse( $c['queue'] ), 0, self::LIST_MAX );
+        $c['exchanges'] = array_slice( array_reverse( $c['exchanges'] ), 0, self::LIST_MAX );
+        return $c;
+    }
+
+    /** Questions by hour of day: 24 square columns, each with its count above it. */
+    private static function hours( array $hours ) {
+        $max = max( $hours );
+        echo '<div class="sfaf-hours" role="img" aria-label="' . esc_attr( 'Questions by hour of day, Pacific time. The table below has every hour.' ) . '">';
+        foreach ( $hours as $hr => $n ) {
+            printf(
+                '<div class="sfaf-hour" title="%s"><span class="sfaf-hour-n">%s</span><span class="sfaf-hour-bar" style="height:%s%%"></span></div>',
+                esc_attr( self::hour_label( $hr ) . ' to ' . self::hour_label( ( $hr + 1 ) % 24 ) . ': ' . $n ),
+                $n > 0 ? esc_html( number_format_i18n( $n ) ) : '',
+                esc_attr( (string) ( $max > 0 ? round( 100 * $n / $max, 1 ) : 0 ) )
+            );
+        }
+        echo '</div><div class="sfaf-hours-axis" aria-hidden="true">';
+        for ( $hr = 0; $hr < 24; $hr++ ) {
+            echo '<span>' . ( 0 === $hr % 3 ? esc_html( str_replace( ' ', '', self::hour_label( $hr ) ) ) : '' ) . '</span>';
+        }
+        echo '</div>';
+        echo '<details class="sfaf-hours-table"><summary>Show as table</summary><div>';
+        foreach ( $hours as $hr => $n ) {
+            echo '<div><span>' . esc_html( self::hour_label( $hr ) ) . '</span><span>' . (int) $n . '</span></div>';
+        }
+        echo '</div></details>';
+    }
+
+    /* ============================== RENDER ============================= */
+
     public function render() {
         $this->admin->gate();
 
@@ -140,20 +237,35 @@ class SFAF_Chat_Admin_Report {
             $team = '';
         }
 
-        $r       = SFAF_Chat_Stats::report( $from, $to, $team );
-        $acted   = array_sum( $r['actions'] );
-        $by      = '' === $team ? 'team' : 'subject';
-        $scope   = '' === $team ? 'All teams' : $team;
+        $r     = SFAF_Chat_Stats::report( $from, $to, $team );
+        $log   = self::log_counts( SFAF_Chat_Log::between( $from, $to, $team ) );
+        $acted = array_sum( $r['actions'] );
+        $by    = '' === $team ? 'team' : 'subject';
+        $scope = '' === $team ? 'All teams' : $team;
 
-        $presets = array(
+        $log_from = $now->modify( '-' . ( SFAF_Chat_Log::RETENTION_DAYS - 1 ) . ' days' )->format( 'Y-m-d' );
+        $presets  = array(
+            'Last 7 days'  => array( $now->modify( '-6 days' )->format( 'Y-m-d' ), $today ),
             'Last 30 days' => array( $now->modify( '-29 days' )->format( 'Y-m-d' ), $today ),
+            'Last 60 days' => array( $now->modify( '-59 days' )->format( 'Y-m-d' ), $today ),
             'Last month'   => array( $now->modify( 'first day of last month' )->format( 'Y-m-d' ), $now->modify( 'last day of last month' )->format( 'Y-m-d' ) ),
             'This month'   => array( $now->modify( 'first day of this month' )->format( 'Y-m-d' ), $today ),
         );
         list( $pending, $no_text ) = SFAF_Chat_Stats::pending_counts();
+
+        // Lines under the headline numbers, all from the same report data.
+        $answered = $r['questions'] - $r['struggled'];
+        $n_groups = count( $r['demand'] );
+        $top_act  = '';
+        if ( $acted > 0 ) {
+            $by_kind = $r['actions'];
+            arsort( $by_kind );
+            $top_act = SFAF_Chat_Stats::ACTIONS[ (string) key( $by_kind ) ] ?? '';
+        }
+        $log_scope = '' === $team ? '' : ' Only questions sorted to this team, so system errors are not counted here.';
         ?>
         <div class="wrap sfaf-chat-admin sfaf-report-wrap">
-            <h1 class="sfaf-report-screen-title">Report</h1>
+            <h1 class="sfaf-report-screen-title">Insights</h1>
             <?php $this->admin->tabs( self::PAGE ); ?>
             <?php $this->admin->show_notice(); ?>
 
@@ -172,23 +284,17 @@ class SFAF_Chat_Admin_Report {
                 <button type="submit" class="button">Show</button>
                 <span class="sfaf-report-presets">
                     <?php foreach ( $presets as $label => $range ) : ?>
-                        <a href="<?php echo esc_url( add_query_arg( array( 'page' => self::PAGE, 'team' => $team, 'from' => $range[0], 'to' => $range[1] ), admin_url( 'admin.php' ) ) ); ?>"><?php echo esc_html( $label ); ?></a>
+                        <a href="<?php echo esc_url( add_query_arg( array( 'page' => self::PAGE, 'team' => $team, 'from' => $range[0], 'to' => $range[1] ), admin_url( 'admin.php' ) ) ); ?>"<?php echo ( $range[0] === $from && $range[1] === $to ) ? ' aria-current="true"' : ''; ?>><?php echo esc_html( $label ); ?></a>
                     <?php endforeach; ?>
                 </span>
                 <button type="button" class="button button-primary sfaf-report-print" data-print>Print / Save as PDF</button>
             </form>
 
-            <?php
-            // Lines under the headline numbers, all from the same report data.
-            $answered  = $r['questions'] - $r['struggled'];
-            $n_groups  = count( $r['demand'] );
-            $top_act   = '';
-            if ( $acted > 0 ) {
-                $by_kind = $r['actions'];
-                arsort( $by_kind );
-                $top_act = SFAF_Chat_Stats::ACTIONS[ (string) key( $by_kind ) ] ?? '';
-            }
-            ?>
+            <?php if ( $log['raw'] ) : ?>
+                <p class="sfaf-insights-banner" role="note"><strong>Raw question and answer text is in these logs.</strong>
+                    That's expected during internal testing only. Turn it off on the General screen before the script tag goes on a page real visitors can reach. Log rows are removed after <?php echo (int) SFAF_Chat_Log::RETENTION_DAYS; ?> days. Question text never prints.</p>
+            <?php endif; ?>
+
             <article class="sfaf-report" id="sfaf-report">
                 <header class="sfaf-report-head">
                     <p class="sfaf-report-kicker"><span>SFAF website chat</span></p>
@@ -288,11 +394,118 @@ class SFAF_Chat_Admin_Report {
                 </section>
                 <?php endif; ?>
 
+                <?php /* From here, the question log (60 days). Its figures are .sfaf-r-fig, never .sfaf-tile-n. */ ?>
+                <section class="sfaf-report-section sfaf-r-log">
+                    <h3>How the chat answered</h3>
+                    <p class="sfaf-report-lead"><?php echo esc_html( sprintf( 'From the question log: %s questions in this range.', number_format_i18n( $log['total'] ) ) . $log_scope ); ?></p>
+                    <ul class="sfaf-r-figs">
+                        <li class="sfaf-r-fig"><span class="sfaf-r-fig-n"><?php echo esc_html( number_format_i18n( $log['pinned'] ) ); ?></span><span class="sfaf-r-fig-l">Used a pinned answer</span><span class="sfaf-r-fig-sub"><?php echo esc_html( self::pct( $log['pinned'], $log['total'] ) . ' of questions, in approved wording' ); ?></span></li>
+                        <li class="sfaf-r-fig sfaf-r-fig-gap"><span class="sfaf-r-fig-n"><?php echo esc_html( number_format_i18n( $log['crisis'] ) ); ?></span><span class="sfaf-r-fig-l">Crisis handoffs</span><span class="sfaf-r-fig-sub">Pointed to 988 and 911. Never counted as a gap.</span></li>
+                        <?php if ( '' === $team ) : ?>
+                        <li class="sfaf-r-fig sfaf-r-fig-gap"><span class="sfaf-r-fig-n"><?php echo esc_html( number_format_i18n( $log['errors'] ) ); ?></span><span class="sfaf-r-fig-l">System errors</span><span class="sfaf-r-fig-sub">Gemini unreachable or unreadable. Not questions.</span></li>
+                        <?php endif; ?>
+                    </ul>
+                </section>
+
+                <div class="sfaf-r-pair">
+                <section class="sfaf-report-section sfaf-r-topics">
+                    <h3>Questions by topic</h3>
+                    <p class="sfaf-report-lead">The topic the chat gave each question.</p>
+                    <?php self::bars( $log['topics'], 'demand', 'No questions in this range.', 20 ); ?>
+                </section>
+                <section class="sfaf-report-section sfaf-r-pages">
+                    <h3>Questions by page</h3>
+                    <p class="sfaf-report-lead">Where people asked: the page the chat was open on, no query strings. Top 15.</p>
+                    <?php self::bars( $log['pages'], 'demand', 'No page recorded in this range.' ); ?>
+                </section>
+                </div>
+
+                <section class="sfaf-report-section sfaf-r-hours">
+                    <h3>Questions by hour of day</h3>
+                    <p class="sfaf-report-lead">Pacific time.</p>
+                    <?php
+                    if ( 0 === $log['total'] ) {
+                        echo '<p class="sfaf-report-empty">No questions in this range.</p>';
+                    } else {
+                        self::hours( $log['hours'] );
+                    }
+                    ?>
+                </section>
+
                 <footer class="sfaf-report-foot">
                     Counts only. This report holds no names, contact details or messages, and nothing in it can be traced to a person.
+                    The report's categories are kept <?php echo (int) SFAF_Chat_Stats::RETENTION_DAYS; ?> days, the question log <?php echo (int) SFAF_Chat_Log::RETENTION_DAYS; ?><?php echo $from < $log_from ? ', so the log sections cover ' . esc_html( self::pretty( $log_from ) ) . ' onward' : ''; ?>.
                     Prepared <?php echo esc_html( wp_date( 'M j, Y', null, $tz ) ); ?>.
                 </footer>
             </article>
+
+            <?php /* Staff only, never printed: question text. */ ?>
+            <div class="sfaf-insights-log">
+                <section class="sfaf-insights-block" aria-labelledby="sfaf-queue">
+                    <h2 id="sfaf-queue">Unanswered queue</h2>
+                    <p class="sfaf-report-lead">Questions the knowledge didn't cover: candidates for new or better content. Newest first<?php echo self::LIST_MAX === count( $log['queue'] ) ? ' (latest ' . (int) self::LIST_MAX . ')' : ''; ?>. Not printed.</p>
+                    <?php if ( ! $log['queue'] ) : ?>
+                        <p class="sfaf-report-empty">Nothing unanswered in this range.</p>
+                    <?php else : ?>
+                        <table class="sfaf-conv sfaf-log-table">
+                            <thead><tr><th scope="col">When (Pacific)</th><th scope="col">Topic</th><th scope="col">Question</th></tr></thead>
+                            <tbody>
+                            <?php foreach ( $log['queue'] as $row ) : ?>
+                                <tr>
+                                    <td class="sfaf-when"><?php echo esc_html( $row['_when']->format( 'M j, g:i a' ) ); ?></td>
+                                    <td><?php echo esc_html( (string) ( $row['topic'] ?? 'other' ) ); ?></td>
+                                    <td><?php echo null !== ( $row['question'] ?? null ) ? esc_html( (string) $row['question'] ) : '<span class="sfaf-nq">not logged (topic-only mode)</span>'; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </section>
+
+                <section class="sfaf-insights-block" aria-labelledby="sfaf-exchanges">
+                    <h2 id="sfaf-exchanges">Recent exchanges</h2>
+                    <p class="sfaf-report-lead">Each question with the answer the visitor was shown, newest first<?php echo self::LIST_MAX === count( $log['exchanges'] ) ? ' (latest ' . (int) self::LIST_MAX . ')' : ''; ?>. Only recorded while raw logging is on (General screen). Each row stands alone: rows are never linked into conversations. Not printed.</p>
+                    <?php if ( ! $log['exchanges'] ) : ?>
+                        <p class="sfaf-report-empty">No exchanges recorded in this range. Turn on raw logging on the General screen to review them.</p>
+                    <?php else : ?>
+                        <table class="sfaf-conv sfaf-log-table sfaf-exchanges">
+                            <thead><tr><th scope="col">When (Pacific)</th><th scope="col">Question</th><th scope="col">Answer</th><th scope="col">Page</th><th scope="col">Details</th></tr></thead>
+                            <tbody>
+                            <?php foreach ( $log['exchanges'] as $row ) : ?>
+                                <tr>
+                                    <td class="sfaf-when"><?php echo esc_html( $row['_when']->format( 'M j, g:i a' ) ); ?></td>
+                                    <td><?php echo esc_html( (string) $row['question'] ); ?></td>
+                                    <td class="sfaf-answer"><?php
+                                    if ( null !== ( $row['answer'] ?? null ) ) {
+                                        echo esc_html( (string) $row['answer'] );
+                                    } elseif ( 'api_error' === ( $row['flag'] ?? null ) ) {
+                                        echo '<span class="sfaf-nq">no answer: the model could not be reached</span>';
+                                    } else {
+                                        echo '<span class="sfaf-nq">not recorded</span>';
+                                    }
+                                    ?></td>
+                                    <td class="sfaf-page"><?php echo ! empty( $row['page'] ) ? esc_html( self::page_label( (string) $row['page'] ) ) : '<span class="sfaf-nq">not recorded</span>'; ?></td>
+                                    <td class="sfaf-meta"><?php
+                                    $bits = array( (string) ( $row['topic'] ?? 'other' ) );
+                                    if ( ! empty( $row['flag'] ) ) {
+                                        $bits[] = 'flag: ' . $row['flag'];
+                                    }
+                                    if ( ! empty( $row['link'] ) ) {
+                                        $bits[] = 'link: ' . $row['link'];
+                                    }
+                                    if ( ! empty( $row['pin'] ) ) {
+                                        $bits[] = 'pinned answer';
+                                    }
+                                    echo esc_html( implode( ' · ', $bits ) );
+                                    ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </section>
+                <p class="sfaf-report-note"><?php echo esc_html( sprintf( 'Source: %s log rows in this range. Log rows older than %d days are deleted automatically.', number_format_i18n( $log['rows'] ), SFAF_Chat_Log::RETENTION_DAYS ) ); ?></p>
+            </div>
 
             <div class="sfaf-report-admin">
                 <h2>Sort earlier questions</h2>
@@ -311,7 +524,7 @@ class SFAF_Chat_Admin_Report {
                 <?php endif; ?>
 
                 <h2>Reset test data before launch</h2>
-                <p>Deletes every number in this report: categories, struggled questions and tracked actions. Use it once, just before the chat goes live, so real figures start clean. It cannot be undone. Questions logged before the reset are not sorted into the report again. The question log on the Dashboard is not changed.</p>
+                <p>Deletes every number in the report: categories, struggled questions and tracked actions. Use it once, just before the chat goes live, so real figures start clean. It cannot be undone. Questions logged before the reset are not sorted into the report again. The question log (the queue, the exchanges, and the sections from the log) is not changed.</p>
                 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" id="sfaf-report-reset" data-confirm="Delete all report data? This cannot be undone.">
                     <input type="hidden" name="action" value="<?php echo esc_attr( self::PURGE_ACTION ); ?>">
                     <?php wp_nonce_field( self::PURGE_ACTION ); ?>

@@ -16,7 +16,6 @@ class SFAF_Chat_Admin {
     const CAP          = 'manage_options';
     const MENU         = 'sfaf-chat';
     const PINS_PAGE    = 'sfaf-chat-pins';
-    const DASH_PAGE    = 'sfaf-chat-dashboard';
     const SPECIAL_PAGE = 'sfaf-chat-instructions';
     const SPECIAL_ACTION = 'sfaf_chat_save_special';
     const MODELS_ACTION  = 'sfaf_chat_check_models';
@@ -34,7 +33,7 @@ class SFAF_Chat_Admin {
     private $messages;
     private $indexing;
     private $contact;
-    private $report;
+    private $insights;
 
     public function register() {
         $this->appearance = new SFAF_Chat_Admin_Appearance( $this );
@@ -44,8 +43,8 @@ class SFAF_Chat_Admin {
         $this->indexing->register();
         $this->contact    = new SFAF_Chat_Admin_Contact( $this );
         $this->contact->register();
-        $this->report     = new SFAF_Chat_Admin_Report( $this );
-        $this->report->register();
+        $this->insights   = new SFAF_Chat_Admin_Insights( $this );
+        $this->insights->register();
         $this->appearance->register();
         $this->questions->register();
         $this->messages->register();
@@ -54,6 +53,7 @@ class SFAF_Chat_Admin {
         add_action( 'admin_post_' . self::MODELS_ACTION, array( $this, 'check_models' ) );
         add_action( 'admin_post_' . self::VOICES_ACTION, array( $this, 'check_voices' ) );
         add_action( 'wp_ajax_' . self::PREVIEW_ACTION, array( $this, 'preview_voice' ) );
+        add_action( 'admin_post_' . SFAF_Chat_Key_Status::ACTION, array( $this, 'test_key' ) );
         add_action( 'admin_menu', array( $this, 'menu' ) );
         add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
         add_action( 'admin_post_' . self::SAVE_ACTION, array( $this, 'save_settings' ) );
@@ -72,8 +72,7 @@ class SFAF_Chat_Admin {
         add_submenu_page( self::MENU, 'Contact', 'Contact', self::CAP, SFAF_Chat_Admin_Contact::PAGE, array( $this->contact, 'render' ) );
         add_submenu_page( self::MENU, 'Special Instructions', 'Special Instructions', self::CAP, self::SPECIAL_PAGE, array( $this, 'render_special' ) );
         add_submenu_page( self::MENU, 'Pinned Answers', 'Pinned Answers', self::CAP, self::PINS_PAGE, array( $this, 'render_pins' ) );
-        add_submenu_page( self::MENU, 'SFAF Chat Dashboard', 'Dashboard', self::CAP, self::DASH_PAGE, array( 'SFAF_Chat_Dashboard', 'render' ) );
-        add_submenu_page( self::MENU, 'SFAF Chat Report', 'Report', self::CAP, SFAF_Chat_Admin_Report::PAGE, array( $this->report, 'render' ) );
+        add_submenu_page( self::MENU, 'SFAF Chat Insights', 'Insights', self::CAP, SFAF_Chat_Admin_Insights::PAGE, array( $this->insights, 'render' ) );
     }
 
     public function assets( $hook ) {
@@ -84,7 +83,7 @@ class SFAF_Chat_Admin {
 
         $is_appearance = false !== strpos( (string) $hook, SFAF_Chat_Admin_Appearance::PAGE );
         $is_general = 'toplevel_page_' . self::MENU === (string) $hook;
-        if ( $is_general || $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Contact::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Report::PAGE ) ) {
+        if ( $is_general || $is_appearance || false !== strpos( (string) $hook, SFAF_Chat_Admin_Questions::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Contact::PAGE ) || false !== strpos( (string) $hook, SFAF_Chat_Admin_Insights::PAGE ) ) {
             wp_enqueue_script( 'sfaf-chat-admin', SFAF_CHAT_URL . 'admin/js/admin.js', array(), SFAF_CHAT_VERSION, true );
             wp_add_inline_script( 'sfaf-chat-admin', 'window.sfafChatAdmin=' . wp_json_encode( array( 'pairs' => SFAF_Chat_Appearance::PAIRS ) ) . ';', 'before' );
         }
@@ -101,8 +100,7 @@ class SFAF_Chat_Admin {
             SFAF_Chat_Admin_Contact::PAGE    => 'Contact',
             self::SPECIAL_PAGE               => 'Special Instructions',
             self::PINS_PAGE                  => 'Pinned Answers',
-            self::DASH_PAGE                  => 'Dashboard',
-            SFAF_Chat_Admin_Report::PAGE     => 'Report',
+            SFAF_Chat_Admin_Insights::PAGE   => 'Insights',
         );
         echo '<nav class="nav-tab-wrapper sfaf-chat-tabs" aria-label="SFAF Chat sections">';
         foreach ( $tabs as $slug => $label ) {
@@ -164,6 +162,14 @@ class SFAF_Chat_Admin {
         ) );
         $problems = array_merge( $problems, SFAF_Chat_Voice::save( $post['voice_en'] ?? '', $post['voice_es'] ?? '' ) );
 
+        // A key just typed in: is it accepted? One read-only call each (1.28.0).
+        if ( '' !== trim( (string) ( $post['api_key'] ?? '' ) ) ) {
+            SFAF_Chat_Key_Status::check( 'gemini' );
+        }
+        if ( '' !== trim( (string) ( $post['tts_key'] ?? '' ) ) ) {
+            SFAF_Chat_Key_Status::check( 'tts' );
+        }
+
         $mode = SFAF_Chat_Settings::MODE_ON === ( $post['mode'] ?? '' )
             ? SFAF_Chat_Settings::MODE_ON
             : SFAF_Chat_Settings::MODE_OFF;
@@ -197,6 +203,29 @@ class SFAF_Chat_Admin {
         $this->stash_notice( array( $result['message'] ), $result['ok'] ? 'success' : 'warning' );
 
         wp_safe_redirect( admin_url( 'admin.php?page=' . self::MENU ) );
+        exit;
+    }
+
+    /** "Test" beside a key's status: check it again now, then back to its screen. */
+    public function test_key() {
+        $this->gate();
+        $service = sanitize_key( wp_unslash( (string) ( $_GET['service'] ?? '' ) ) );
+        if ( ! isset( SFAF_Chat_Key_Status::SERVICES[ $service ] ) ) {
+            wp_die( 'Unknown key.', 400 );
+        }
+        check_admin_referer( SFAF_Chat_Key_Status::ACTION . '_' . $service );
+        $st   = SFAF_Chat_Key_Status::check( $service );
+        $name = SFAF_Chat_Key_Status::SERVICES[ $service ];
+        $says = array(
+            'ok'          => array( $name . ' accepted the key.', 'success' ),
+            'rejected'    => array( $name . ' rejected the key. Check it, and paste it again.', 'error' ),
+            'unreachable' => array( $name . ' could not be reached, so the key could not be checked. Try again shortly.', 'warning' ),
+            'none'        => array( 'No ' . $name . ' key is saved.', 'warning' ),
+        );
+        $say = $says[ $st['state'] ] ?? $says['unreachable'];
+        $this->stash_notice( array( $say[0] ), $say[1] );
+        $page = 'postmark' === $service ? SFAF_Chat_Admin_Contact::PAGE : self::MENU;
+        wp_safe_redirect( admin_url( 'admin.php?page=' . $page ) );
         exit;
     }
 
@@ -254,6 +283,7 @@ class SFAF_Chat_Admin {
                         echo 'No key saved yet, so Read aloud uses the browser voice.';
                     }
                     ?> The saved key is never shown here. This is not the Gemini key.</p>
+                    <?php SFAF_Chat_Key_Status::render( 'tts' ); ?>
                 </td>
             </tr>
             <?php foreach ( $names as $lang => $label ) :
@@ -343,6 +373,7 @@ class SFAF_Chat_Admin {
                         <td>
                             <input type="password" id="sfaf-chat-key" name="api_key" class="regular-text" value="" autocomplete="new-password">
                             <p class="description"><?php echo $has_key ? 'A key is saved. Leave this blank to keep it, or type a new key to replace it.' : 'No key saved yet.'; ?> The saved key is never shown here.</p>
+                            <?php SFAF_Chat_Key_Status::render( 'gemini' ); ?>
                         </td>
                     </tr>
                     <tr>
@@ -378,7 +409,7 @@ class SFAF_Chat_Admin {
 
                 <h2>Logging</h2>
                 <p><label><input type="checkbox" name="raw_questions" value="1" <?php checked( ! empty( $settings['raw_questions'] ) ); ?>>
-                    Log raw question and answer text, to review full exchanges on the Dashboard. For internal testing only. It records every question asked on any page with the script tag, and the assistant's answer, so turn it off before the tag goes on a page real visitors can reach. Still no IP address, user or session; rows are deleted after 60 days.</label></p>
+                    Log raw question and answer text, to review full exchanges on the Insights screen. For internal testing only. It records every question asked on any page with the script tag, and the assistant's answer, so turn it off before the tag goes on a page real visitors can reach. Still no IP address, user or session; rows are deleted after 60 days.</label></p>
 
                 <?php submit_button( 'Save settings' ); ?>
             </form>

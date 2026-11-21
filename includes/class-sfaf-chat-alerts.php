@@ -19,6 +19,12 @@
  * save() and delete(), from the Welcome & Alerts screen. The text is plain: tags
  * are stripped and whitespace collapsed on the way in, and the widget renders it
  * with textContent.
+ *
+ * ONE LINK (1.28.0): an optional web address and link text. Staff write it, so it is
+ * trusted: the widget shows it as given, outside the link allowlist that holds the
+ * model's replies. That trust is this field's alone. The address must be http(s),
+ * mailto: or tel:; link text with no address is refused. No text: the address itself
+ * is the label. The model is told the alert's text only, never its link.
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
 
@@ -27,6 +33,8 @@ class SFAF_Chat_Alerts {
     const OPTION          = 'sfaf_chat_alerts';
     const MAX             = 30;
     const MAX_TEXT        = 280;
+    const MAX_LINK_TEXT   = 80;
+    const MAX_URL         = 500;
     const KEEP_ENDED_DAYS = 14;
 
     /** Today, Y-m-d, Pacific. */
@@ -37,7 +45,7 @@ class SFAF_Chat_Alerts {
     /**
      * Every alert, soonest start first.
      *
-     * @return array[] id, text, start, end ('' = no end date)
+     * @return array[] id, text, start, end ('' = no end date), url, link_text ('' = none)
      */
     public static function all() {
         $raw = get_option( self::OPTION, array() );
@@ -55,7 +63,9 @@ class SFAF_Chat_Alerts {
             if ( '' !== $end && $end < $start ) {
                 $end = $start;
             }
-            $out[] = array( 'id' => (string) $id, 'text' => $text, 'start' => $start, 'end' => $end );
+            $url   = self::clean_url( $a['url'] ?? '' );
+            $out[] = array( 'id' => (string) $id, 'text' => $text, 'start' => $start, 'end' => $end,
+                'url' => $url, 'link_text' => '' === $url ? '' : self::clean_link_text( $a['link_text'] ?? '' ) );
         }
         usort( $out, function ( $a, $b ) {
             return array( $a['start'], $a['id'] ) <=> array( $b['start'], $b['id'] );
@@ -88,10 +98,13 @@ class SFAF_Chat_Alerts {
      *
      * @return string|WP_Error The id.
      */
-    public static function save( $id, $text, $start, $end = '' ) {
-        $text  = self::clean_text( $text );
-        $start = self::clean_date( $start );
-        $end   = self::clean_date( $end );
+    public static function save( $id, $text, $start, $end = '', $url = '', $link_text = '' ) {
+        $text      = self::clean_text( $text );
+        $start     = self::clean_date( $start );
+        $end       = self::clean_date( $end );
+        $raw_url   = trim( (string) $url );
+        $url       = self::clean_url( $raw_url );
+        $link_text = self::clean_link_text( $link_text );
 
         if ( '' === $text ) {
             return new WP_Error( 'sfaf_chat_alert_text', 'Write the alert text.' );
@@ -101,6 +114,12 @@ class SFAF_Chat_Alerts {
         }
         if ( '' !== $end && $end < $start ) {
             return new WP_Error( 'sfaf_chat_alert_backwards', 'The end date is before the start date.' );
+        }
+        if ( '' !== $raw_url && '' === $url ) {
+            return new WP_Error( 'sfaf_chat_alert_url', 'The link address must be a full web address starting with https:// (or http://, mailto: or tel:).' );
+        }
+        if ( '' === $url && '' !== $link_text ) {
+            return new WP_Error( 'sfaf_chat_alert_link_text', 'Add the web address for the link text, or clear the link text.' );
         }
 
         $raw = get_option( self::OPTION, array() );
@@ -114,7 +133,7 @@ class SFAF_Chat_Alerts {
             $id = 'a' . str_replace( '-', '', $start ) . '-' . substr( md5( uniqid( '', true ) ), 0, 6 );
         }
 
-        $raw[ $id ] = array( 'text' => $text, 'start' => $start, 'end' => $end );
+        $raw[ $id ] = array( 'text' => $text, 'start' => $start, 'end' => $end, 'url' => $url, 'link_text' => '' === $url ? '' : $link_text );
         update_option( self::OPTION, $raw, false );
         return $id;
     }
@@ -153,6 +172,41 @@ class SFAF_Chat_Alerts {
     public static function clean_text( $text ) {
         $text = trim( (string) preg_replace( '/\s+/u', ' ', wp_strip_all_tags( (string) $text ) ) );
         return mb_substr( $text, 0, self::MAX_TEXT );
+    }
+
+    /**
+     * The alert's link for the chat, or null: {url, label}. The label is the link text,
+     * or the address itself without its scheme.
+     */
+    public static function link( array $a ) {
+        $url = self::clean_url( $a['url'] ?? '' );
+        if ( '' === $url ) {
+            return null;
+        }
+        $label = self::clean_link_text( $a['link_text'] ?? '' );
+        return array( 'url' => $url, 'label' => '' !== $label ? $label : $url );
+    }
+
+    /** An http(s), mailto: or tel: address, as given, or ''. No spaces, no markup. */
+    public static function clean_url( $url ) {
+        $url = trim( (string) $url );
+        if ( '' === $url || strlen( $url ) > self::MAX_URL || preg_match( '/[\s<>"\x00-\x1f\x7f]/', $url ) ) {
+            return '';
+        }
+        if ( preg_match( '#^https?://#i', $url ) ) {
+            $host = wp_parse_url( $url, PHP_URL_HOST );
+            return is_string( $host ) && '' !== $host && false === strpos( $host, '@' ) ? $url : '';
+        }
+        if ( preg_match( '/^mailto:[^@\s]+@[^@\s]+$/i', $url ) || preg_match( '/^tel:\+?[0-9().\-]{3,20}$/i', $url ) ) {
+            return $url;
+        }
+        return '';
+    }
+
+    /** Plain text, one line, capped. */
+    public static function clean_link_text( $text ) {
+        $text = trim( (string) preg_replace( '/\s+/u', ' ', wp_strip_all_tags( (string) $text ) ) );
+        return mb_substr( $text, 0, self::MAX_LINK_TEXT );
     }
 
     /** A real Y-m-d date, or ''. */

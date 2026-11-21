@@ -1,5 +1,4 @@
-/* SFAF Chat admin screens. The dashboard rules carry over from the standalone
-   dashboard, scoped under .sfaf-chat-dash so nothing leaks into wp-admin. */
+/* SFAF Chat admin screens. Insights (1.28.0) wears the report's look, below. */
 
 /* Settings and Pinned Answers */
 .sfaf-chat-admin h2 { margin-top: 2em; }
@@ -12,6 +11,14 @@
 .sfaf-chat-explain ul { list-style: disc; padding-left: 20px; }
 .sfaf-chat-test { display: flex; gap: 8px; max-width: 760px; }
 .sfaf-chat-triggers { white-space: pre-wrap; display: block; background: none; padding: 0; }
+
+/* Key status (1.28.0): an icon and words, never color alone. Square, flat; the words stay
+   #373433, since brand green on white is too light to read. */
+.sfaf-key-status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 8px 0 0; color: #373433; font-weight: 600; }
+.sfaf-key-status.sfaf-key-none, .sfaf-key-status.sfaf-key-unreachable { color: #646970; font-weight: 400; }
+.sfaf-key-icon { flex: none; display: block; width: 16px; height: 16px; border-radius: 0; }
+.sfaf-key-when { color: #646970; font-weight: 400; font-size: 12px; }
+.sfaf-key-test { font-weight: 600; }
 
 /* Tabs and grouped forms */
 .sfaf-chat-tabs { margin-bottom: 16px; }
@@ -86,73 +93,7 @@
   .sfaf-chat-side { position: static; max-width: 420px; }
 }
 
-/* Dashboard */
-.sfaf-chat-dash {
-  --surface: #fcfcfb; --border: #dde2e5;
-  --text: #14181b; --text-2: #3e4a52; --muted: #5b6670;
-  --grid: #e6eaec; --bar: #0098ad; --bar-hover: #00778a;
-  --warn-bg: #fff4e5; --warn-border: #e8b86a;
-  max-width: 1080px; color: var(--text); font-size: 14px; line-height: 1.45;
-}
-.sfaf-chat-dash .dash-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin: 12px 0 16px; }
-.sfaf-chat-dash h1 { padding: 0; margin: 0; }
-.sfaf-chat-dash h2 { font-size: 16px; margin: 0 0 4px; }
-.sfaf-chat-dash .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
-.sfaf-chat-dash .ranges { display: flex; gap: 6px; }
-.sfaf-chat-dash .ranges a { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-2); text-decoration: none; background: var(--surface); }
-.sfaf-chat-dash .ranges a[aria-current="page"] { background: var(--text); color: var(--surface); border-color: var(--text); }
-.sfaf-chat-dash .banner { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; }
-.sfaf-chat-dash .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.sfaf-chat-dash .tile, .sfaf-chat-dash .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-width: none; }
-.sfaf-chat-dash .tile { padding: 14px 16px; }
-.sfaf-chat-dash .tile .n { font-size: 28px; line-height: 1.2; font-weight: 700; font-variant-numeric: tabular-nums; }
-.sfaf-chat-dash .tile .l { color: var(--muted); font-size: 13px; }
-.sfaf-chat-dash .card { padding: 18px; margin: 0 0 16px; }
-.sfaf-chat-dash .empty { color: var(--muted); padding: 24px 0; text-align: center; }
-
-/* Topic frequency: ranked horizontal bars, single series (no legend). */
-.sfaf-chat-dash .hbars { display: grid; grid-template-columns: minmax(110px, max-content) 1fr; gap: 2px 12px; align-items: center; }
-.sfaf-chat-dash .hbars .lab { color: var(--text-2); text-align: right; white-space: nowrap; }
-.sfaf-chat-dash .hbars .track { display: flex; align-items: center; gap: 8px; height: 22px; }
-.sfaf-chat-dash .hbars .bar { height: 16px; background: var(--bar); border-radius: 0 4px 4px 0; min-width: 2px; }
-.sfaf-chat-dash .hbars .val { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.sfaf-chat-dash .hbars .track:hover .bar { background: var(--bar-hover); }
-
-/* By hour: 24 columns, baseline-anchored, hover tooltip per bar. */
-.sfaf-chat-dash .vchart { position: relative; padding-left: 34px; }
-.sfaf-chat-dash .plot { position: relative; height: 180px; display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; align-items: end; border-bottom: 1px solid var(--muted); }
-.sfaf-chat-dash .gridline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); pointer-events: none; }
-.sfaf-chat-dash .gridline span { position: absolute; left: -34px; top: -9px; width: 28px; text-align: right; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.sfaf-chat-dash .col { position: relative; height: 100%; display: flex; align-items: flex-end; cursor: default; outline: none; }
-.sfaf-chat-dash .col::before { content: ""; position: absolute; inset: 0; }
-.sfaf-chat-dash .col .bar { width: 100%; background: var(--bar); border-radius: 4px 4px 0 0; min-height: 0; }
-.sfaf-chat-dash .col:hover .bar, .sfaf-chat-dash .col:focus .bar { background: var(--bar-hover); }
-.sfaf-chat-dash .col .tip { display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--text); color: var(--surface); font-size: 12px; padding: 4px 8px; border-radius: 6px; white-space: nowrap; z-index: 2; pointer-events: none; }
-.sfaf-chat-dash .col:hover .tip, .sfaf-chat-dash .col:focus .tip { display: block; }
-.sfaf-chat-dash .xaxis { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; margin-top: 4px; }
-.sfaf-chat-dash .xaxis span { font-size: 11px; color: var(--muted); text-align: center; }
-
-.sfaf-chat-dash details { margin-top: 12px; }
-.sfaf-chat-dash summary { cursor: pointer; color: var(--text-2); }
-.sfaf-chat-dash table { border-collapse: collapse; width: 100%; }
-.sfaf-chat-dash th, .sfaf-chat-dash td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
-.sfaf-chat-dash th { color: var(--muted); font-weight: 600; font-size: 13px; }
-.sfaf-chat-dash td.when { white-space: nowrap; }
-.sfaf-chat-dash .hourtable { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0 16px; margin-top: 8px; }
-.sfaf-chat-dash .hourtable div { display: flex; justify-content: space-between; border-bottom: 1px solid var(--grid); padding: 4px 0; }
-.sfaf-chat-dash .q { color: var(--text); }
-.sfaf-chat-dash .nq { color: var(--muted); font-style: italic; }
-.sfaf-chat-dash .a { color: var(--text-2); white-space: pre-wrap; }
-.sfaf-chat-dash .exchanges td { overflow-wrap: anywhere; }
-.sfaf-chat-dash .exchanges td.meta { color: var(--muted); font-size: 12px; min-width: 120px; }
-.sfaf-chat-dash .exchanges td.page, .sfaf-chat-dash .pages td:first-child { font-size: 12px; overflow-wrap: anywhere; min-width: 140px; }
-
-@media (max-width: 560px) {
-  .sfaf-chat-dash .xaxis span:nth-child(odd) { visibility: hidden; }
-  .sfaf-chat-dash .hbars { grid-template-columns: minmax(90px, max-content) 1fr; }
-}
-
-/* ================================ REPORT (1.23.0, restyled 1.24.0) ================
+/* ============== INSIGHTS: THE REPORT (1.23.0, restyled 1.24.0, merged 1.28.0) ==============
    Shown in team meetings and saved as PDF, so it is laid out like a printed page, in the
    SFAF brand guide's terms: square corners, flat color, no soft shadows, #373433 and
    #FFD900, with brand red #F04937 for gaps and brand green #8CC745 for actions.
@@ -265,6 +206,45 @@
 .sfaf-report-admin { max-width: 980px; margin-top: 36px; padding-top: 8px; border-top: 1px solid #c3c4c7; }
 .sfaf-report-admin h2 { margin-top: 24px; }
 
+/* Insights (1.28.0): what came over from the Dashboard, in the report's terms. */
+.sfaf-report-presets a[aria-current] { color: var(--r-ink); font-weight: 700; text-decoration: none; border-bottom: 3px solid var(--r-yellow); }
+.sfaf-insights-banner { max-width: 980px; box-sizing: border-box; margin: 0 0 16px; padding: 10px 14px; background: #fff; color: var(--r-ink);
+  border: 1px solid var(--r-line); border-left: 6px solid var(--r-yellow); border-radius: 0; }
+
+/* Three smaller figures from the log, each with a chip like the KPIs. Not .sfaf-tile-n. */
+.sfaf-r-figs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; }
+.sfaf-r-fig { position: relative; margin: 0; padding: 4px 0 4px 26px; display: flex; flex-direction: column; }
+.sfaf-r-fig::before { content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px; width: 8px; background: var(--r-ink); transform: skewX(var(--r-angle)); }
+.sfaf-r-fig-gap::before { background: var(--r-red); }
+.sfaf-r-fig-n { font-size: 38px; line-height: 1; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.sfaf-r-fig-l { margin-top: 6px; font-size: 15px; font-weight: 700; }
+.sfaf-r-fig-sub { font-size: 12.5px; color: var(--r-muted); }
+
+/* By hour: 24 flat, square columns on a heavy baseline, each count above its column. */
+.sfaf-hours { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; height: 170px; align-items: end; border-bottom: 3px solid var(--r-ink); }
+.sfaf-hour { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; }
+.sfaf-hour-n { font-size: 10.5px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; min-height: 14px; }
+.sfaf-hour-bar { display: block; background: var(--r-yellow); max-height: calc(100% - 14px); }
+.sfaf-hours-axis { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; margin-top: 4px; }
+.sfaf-hours-axis span { font-size: 11px; color: var(--r-muted); text-align: left; white-space: nowrap; }
+.sfaf-hours-table { margin-top: 12px; }
+.sfaf-hours-table summary { cursor: pointer; font-weight: 600; }
+.sfaf-hours-table > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0 16px; margin-top: 8px; }
+.sfaf-hours-table > div > div { display: flex; justify-content: space-between; border-bottom: 1px solid var(--r-line); padding: 4px 0; font-variant-numeric: tabular-nums; }
+
+/* The question log, on screen only: same square table as the conversion table. */
+.sfaf-insights-log { max-width: 980px; margin-top: 28px; font-family: var(--r-font); color: var(--r-ink); }
+.sfaf-insights-block { background: #fff; border: 1px solid var(--r-line); border-radius: 0; padding: 24px 28px; margin: 0 0 20px; }
+.sfaf-insights-block h2 { position: relative; margin: 0 0 4px; padding-left: 20px; font-family: var(--r-font); font-size: 20px; font-weight: 800; }
+.sfaf-insights-block h2::before { content: ""; position: absolute; left: 1px; top: 3px; bottom: 3px; width: 9px; background: var(--r-yellow); transform: skewX(var(--r-angle)); }
+.sfaf-log-table td { vertical-align: top; overflow-wrap: anywhere; }
+.sfaf-log-table td:last-child { font-weight: 400; white-space: normal; }
+.sfaf-log-table .sfaf-when { white-space: nowrap; }
+.sfaf-log-table .sfaf-answer { white-space: pre-wrap; color: var(--r-muted); }
+.sfaf-log-table .sfaf-page, .sfaf-log-table .sfaf-meta { font-size: 12px; min-width: 120px; }
+.sfaf-log-table .sfaf-meta { color: var(--r-muted); }
+.sfaf-nq { color: var(--r-muted); font-style: italic; }
+
 @media (max-width: 782px) {
   .sfaf-report { padding: 24px 16px; }
   .sfaf-report-head h2 { font-size: 26px; }
@@ -278,6 +258,10 @@
   .sfaf-bars li { grid-template-columns: minmax(100px, 40%) 1fr 40px; }
   .sfaf-rate { width: 60px; }
   .sfaf-report-print { margin-left: 0 !important; }
+  .sfaf-r-figs { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .sfaf-hour-n { visibility: hidden; }
+  .sfaf-hours-axis span:nth-child(3n+2) { visibility: hidden; }
+  .sfaf-insights-block { padding: 18px 14px; overflow-x: auto; }
 }
 
 /* Print / Save as PDF: the report alone, on white, with its colors. The screen layout
@@ -286,7 +270,8 @@
   @page { size: letter; margin: 13mm 12mm; }
   html, body, #wpwrap, #wpcontent, #wpbody, #wpbody-content { background: #fff !important; }
   #adminmenumain, #adminmenuback, #adminmenuwrap, #wpadminbar, #wpfooter, #screen-meta, #screen-meta-links,
-  .sfaf-chat-tabs, .notice, .update-nag, .sfaf-report-controls, .sfaf-report-admin, .sfaf-report-screen-title { display: none !important; }
+  .sfaf-chat-tabs, .notice, .update-nag, .sfaf-report-controls, .sfaf-report-admin, .sfaf-report-screen-title,
+  .sfaf-insights-banner, .sfaf-insights-log, .sfaf-hours-table { display: none !important; }
   #wpcontent, #wpbody-content { margin: 0 !important; padding: 0 !important; }
   html.wp-toolbar { padding-top: 0 !important; }
   .wrap { margin: 0 !important; }
@@ -294,7 +279,8 @@
   .sfaf-report, .sfaf-report *, .sfaf-report *::before, .sfaf-report *::after { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .sfaf-r-hero { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
   .sfaf-r-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .sfaf-r-hero, .sfaf-r-pair > .sfaf-report-section, .sfaf-bars li, .sfaf-conv tr { break-inside: avoid; page-break-inside: avoid; }
+  .sfaf-r-hero, .sfaf-r-pair > .sfaf-report-section, .sfaf-bars li, .sfaf-conv tr, .sfaf-r-figs, .sfaf-r-hours { break-inside: avoid; page-break-inside: avoid; }
+  .sfaf-r-figs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sfaf-report-section h3, .sfaf-report-section h4 { break-after: avoid; page-break-after: avoid; }
   /* Paper has no margin to hang the heading chips in, so they move inside. */
   .sfaf-report-section h3 { padding-left: 20px; }

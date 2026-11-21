@@ -89,6 +89,11 @@ class SFAF_Chat_Voice {
     /* ================================== KEY =============================== */
 
     /** The TTS key: the saved one, else config.php's. Never the Gemini key. */
+    /** The key in use, for the server's own calls and SFAF_Chat_Key_Status. Never output. */
+    public static function api_key() {
+        return self::key();
+    }
+
     private static function key() {
         $saved = trim( SFAF_Chat_Credentials::get( 'tts_key' ) );
         return '' !== $saved ? $saved : self::config_key();
@@ -201,6 +206,7 @@ class SFAF_Chat_Voice {
             'voices'  => (array) ( $cached['voices'] ?? array() ),
             'checked' => (int) ( $cached['checked'] ?? 0 ),
             'error'   => '',
+            'http'    => 0,
         );
         if ( ! self::ready() ) {
             return $list;
@@ -214,6 +220,7 @@ class SFAF_Chat_Voice {
             'headers' => array( 'x-goog-api-key' => self::key() ),
         ) );
         $http = is_wp_error( $reply ) ? 0 : (int) wp_remote_retrieve_response_code( $reply );
+        $list['http'] = $http;
         $data = is_wp_error( $reply ) ? null : json_decode( (string) wp_remote_retrieve_body( $reply ), true );
         if ( 200 !== $http || ! is_array( $data ) || ! isset( $data['voices'] ) ) {
             $list['error'] = 0 === $http

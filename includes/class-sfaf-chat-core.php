@@ -164,7 +164,7 @@ class SFAF_Chat_Core {
      * The page a question was asked on, as the widget reports it: http(s), no query
      * or fragment (where personal details could ride), 255 characters at most. ''
      * when it isn't a page address. Never trusted for anything but routing a
-     * contact request and the Dashboard.
+     * contact request and the Insights screen.
      */
     public static function clean_page_url( $url ) {
         $url = trim( (string) $url );

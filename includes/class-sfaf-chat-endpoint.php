@@ -329,8 +329,9 @@ class SFAF_Chat_Endpoint {
 
         // Active alerts ride along: this call is made each time the chat opens and is
         // never cached, so an alert shows from its first day and clears after its last.
+        // An alert's link (1.28.0) is staff-written and shown as given: see SFAF_Chat_Alerts.
         $alerts = array_map( function ( $a ) {
-            return array( 'id' => $a['id'], 'text' => $a['text'] );
+            return array( 'id' => $a['id'], 'text' => $a['text'], 'link' => SFAF_Chat_Alerts::link( $a ) );
         }, SFAF_Chat_Alerts::active() );
 
         return new WP_REST_Response( array( 'ok' => true, 'questions' => $set['questions'], 'alerts' => $alerts ), 200 );
@@ -452,7 +453,7 @@ class SFAF_Chat_Endpoint {
         }
 
         // The page this was asked on, as the widget reports it, cleaned. For routing a
-        // contact request and for the Dashboard; never sent to the model.
+        // contact request and for the Insights screen; never sent to the model.
         $page = SFAF_Chat_Core::clean_page_url( is_array( $body ) ? ( $body['page'] ?? '' ) : '' );
         if ( ! array_key_exists( $scope, self::SCOPES ) ) {
             $scope = 'all';

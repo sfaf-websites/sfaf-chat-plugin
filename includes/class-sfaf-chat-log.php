@@ -39,7 +39,7 @@ class SFAF_Chat_Log {
         $table   = self::table();
         $charset = $wpdb->get_charset_collate();
 
-        // ts is UTC. The dashboard converts to Pacific when it reads.
+        // ts is UTC. The Insights screen converts to Pacific when it reads.
         dbDelta( "CREATE TABLE $table (
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   ts datetime NOT NULL,
@@ -119,15 +119,31 @@ class SFAF_Chat_Log {
         $wpdb->suppress_errors( $suppress );
     }
 
-    /** Rows newer than $days, oldest first. Admin screens only. */
-    public static function since_days( $days ) {
+    /**
+     * Rows from $from to $to (Y-m-d, Pacific, inclusive), oldest first. Admin screens only.
+     * With a team, only the questions the insights report sorted to it (through the stats
+     * row's log_id), so errors, which the report never counts, drop out.
+     */
+    public static function between( $from, $to, $team = '' ) {
         global $wpdb;
-        $cutoff = gmdate( 'Y-m-d H:i:s', time() - ( (int) $days * DAY_IN_SECONDS ) );
-        $table  = self::table();
-        $rows   = $wpdb->get_results(
-            $wpdb->prepare( "SELECT ts, topic, in_scope, flag, link, pin, http, model, attempts, question, answer, page FROM $table WHERE ts >= %s ORDER BY ts ASC", $cutoff ),
-            ARRAY_A
-        );
+        $tz    = SFAF_Chat_Core::timezone();
+        $utc   = new DateTimeZone( 'UTC' );
+        $start = ( new DateTimeImmutable( $from . ' 00:00:00', $tz ) )->setTimezone( $utc )->format( 'Y-m-d H:i:s' );
+        $end   = ( new DateTimeImmutable( $to . ' 00:00:00', $tz ) )->modify( '+1 day' )->setTimezone( $utc )->format( 'Y-m-d H:i:s' );
+        $table = self::table();
+        $cols  = 'l.id, l.ts, l.topic, l.in_scope, l.flag, l.link, l.pin, l.http, l.model, l.attempts, l.question, l.answer, l.page';
+        if ( '' === (string) $team ) {
+            $sql = $wpdb->prepare( "SELECT $cols FROM $table l WHERE l.ts >= %s AND l.ts < %s ORDER BY l.ts ASC, l.id ASC", $start, $end );
+        } else {
+            $stats = SFAF_Chat_Stats::table();
+            $sql   = $wpdb->prepare(
+                "SELECT DISTINCT $cols FROM $table l INNER JOIN $stats s ON s.log_id = l.id AND s.kind = 'question' WHERE l.ts >= %s AND l.ts < %s AND s.team = %s ORDER BY l.ts ASC, l.id ASC",
+                $start, $end, (string) $team
+            );
+        }
+        $suppress = $wpdb->suppress_errors( true );
+        $rows     = $wpdb->get_results( $sql, ARRAY_A );
+        $wpdb->suppress_errors( $suppress );
         return is_array( $rows ) ? $rows : array();
     }
 }

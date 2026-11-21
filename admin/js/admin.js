@@ -276,7 +276,7 @@
 
   /* ================================ REPORT ================================ */
 
-  // Report screen (1.23.0): print, sort earlier questions with progress, confirm Reset.
+  // Insights screen (1.23.0 report, 1.28.0): print, sort earlier questions with progress, confirm Reset.
   function initReport() {
     Array.prototype.forEach.call(document.querySelectorAll('[data-print]'), function (b) {
       b.addEventListener('click', function () { window.print(); });

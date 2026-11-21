@@ -50,7 +50,7 @@ class SFAF_Chat_Admin_Messages {
         check_admin_referer( self::ALERT_ACTION );
 
         $post   = wp_unslash( $_POST );
-        $result = SFAF_Chat_Alerts::save( '', $post['text'] ?? '', $post['start'] ?? '', $post['end'] ?? '' );
+        $result = SFAF_Chat_Alerts::save( '', $post['text'] ?? '', $post['start'] ?? '', $post['end'] ?? '', $post['url'] ?? '', $post['link_text'] ?? '' );
 
         if ( is_wp_error( $result ) ) {
             $this->admin->stash_notice( array( 'The alert was not saved: ' . $result->get_error_message() ), 'error' );
@@ -115,7 +115,10 @@ class SFAF_Chat_Admin_Messages {
                     <tbody>
                         <?php foreach ( $alerts as $a ) : $status = SFAF_Chat_Alerts::status( $a, $today ); ?>
                             <tr>
-                                <td><?php echo esc_html( $a['text'] ); ?></td>
+                                <td><?php echo esc_html( $a['text'] ); ?>
+                                    <?php $link = SFAF_Chat_Alerts::link( $a ); if ( $link ) : ?>
+                                        <br><span class="description">Link: <a href="<?php echo esc_url( $link['url'], array( 'http', 'https', 'mailto', 'tel' ) ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $link['label'] ); ?></a><?php echo $link['label'] !== $link['url'] ? ' (' . esc_html( $link['url'] ) . ')' : ''; ?></span>
+                                    <?php endif; ?></td>
                                 <td><?php echo esc_html( self::day( $a['start'] ) ); ?></td>
                                 <td><?php echo esc_html( '' === $a['end'] ? 'Until deleted' : self::day( $a['end'] ) ); ?></td>
                                 <td><span class="sfaf-chat-status sfaf-chat-status-<?php echo esc_attr( $status ); ?>"><?php echo esc_html( $labels[ $status ] ); ?></span></td>
@@ -153,6 +156,16 @@ class SFAF_Chat_Admin_Messages {
                         <th scope="row"><label for="sfaf-chat-alert-end">Last day</label></th>
                         <td><input type="date" id="sfaf-chat-alert-end" name="end">
                             <p class="description">Optional. Leave blank to show it until you delete it.</p></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="sfaf-chat-alert-url">Link address</label></th>
+                        <td><input type="url" id="sfaf-chat-alert-url" name="url" class="large-text" maxlength="<?php echo (int) SFAF_Chat_Alerts::MAX_URL; ?>" placeholder="https://www.sfaf.org/">
+                            <p class="description">Optional. One link, shown under the alert. A full address starting with https:// (or http://, mailto: or tel:). It is shown exactly as you enter it, so check it.</p></td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="sfaf-chat-alert-link-text">Link text</label></th>
+                        <td><input type="text" id="sfaf-chat-alert-link-text" name="link_text" class="regular-text" maxlength="<?php echo (int) SFAF_Chat_Alerts::MAX_LINK_TEXT; ?>">
+                            <p class="description">Optional. Without it, the address itself is the link.</p></td>
                     </tr>
                 </table>
                 <?php submit_button( 'Add alert' ); ?>

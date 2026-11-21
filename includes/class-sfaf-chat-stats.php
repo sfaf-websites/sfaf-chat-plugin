@@ -18,7 +18,7 @@
  * addresses, session ids, cookies, user agents or pages. A conversation is never
  * identified: "conv" is worked out by the widget in memory and sent as a yes/no.
  *
- * Kept for RETENTION_DAYS, pruned by the daily job; Reset on the Report screen empties
+ * Kept for RETENTION_DAYS, pruned by the daily job; Reset on the Insights screen empties
  * it. The log keeps its own 60-day rule and its own raw-text switch, untouched here.
  */
 if ( ! defined( 'ABSPATH' ) ) exit;
@@ -247,7 +247,7 @@ class SFAF_Chat_Stats {
     }
 
     /**
-     * Reset (the Report screen): every report row goes, and the backfill won't bring
+     * Reset (the Insights screen): every report row goes, and the backfill won't bring
      * back questions logged before now. The log itself is not touched.
      */
     public static function purge() {
@@ -276,7 +276,7 @@ class SFAF_Chat_Stats {
 
     /**
      * One batch of the backfill: up to BATCH logged questions sorted in one model
-     * call. Returns {done, left, error}. Called again and again by the Report screen.
+     * call. Returns {done, left, error}. Called again and again by the Insights screen.
      */
     public static function backfill_batch() {
         global $wpdb;

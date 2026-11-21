@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.27.0
+Stable tag: 1.28.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,35 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.28.0 =
+* Dashboard and Report are now one tab, Insights, in the report's look (square, flat,
+  SFAF yellow and dark, red for gaps, green for actions, the 9.5 degree accent,
+  Montserrat bundled). Nothing was dropped. From the Dashboard it keeps pinned answers,
+  crisis handoffs, system errors, questions by topic, page and hour (with its table), the
+  unanswered queue, recent exchanges, and the 7 and 60 day ranges (now presets beside
+  Last 30 days, Last month and This month). Only duplicates went: the Dashboard's
+  Questions, Answered and Unanswered tiles and its personal-advice and off-topic counts,
+  which the report already shows as Questions asked, Answered well and "Why".
+* One date range and one team filter for everything. With a team chosen, the sections
+  from the question log show only the questions sorted to that team.
+* Print / Save as PDF prints the report and the log's counts and charts. The unanswered
+  queue and recent exchanges (question text) stay on screen only, as do Sort earlier
+  questions and Reset.
+* Alerts (Welcome & Alerts) can carry one link: a web address and optional link text.
+  With text, the link shows as that text; with only an address, as the address; with no
+  address, no link. Staff-entered, so it is shown as given, outside the link allowlist
+  that governs the assistant's replies; that exception applies to alert links only. It
+  must be https://, http://, mailto: or tel:. The assistant is told the alert's text,
+  never its link.
+* Every key field shows whether the key works: a green square check and "Key saved and
+  working", a red square mark and "Key saved, but [service] rejected it", or "No key
+  saved". If the service could not be reached, it says that instead. Checked with one
+  read-only call (Gemini: the model's details; Postmark: the server's details; Text-to-
+  Speech: the voice list), so no text, email or audio is produced. Checked when a key is
+  saved, and with the Test link beside each status; the result is cached and tied to the
+  key, so a changed key (here or in config.php) is checked again once. The key itself is
+  never shown, stored with the result, or sent to the browser.
 
 = 1.27.0 =
 * Read aloud can speak with Google Cloud Text-to-Speech voices instead of the browser's.

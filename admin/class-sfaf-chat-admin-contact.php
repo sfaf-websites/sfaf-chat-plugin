@@ -119,6 +119,8 @@ class SFAF_Chat_Admin_Contact {
 
         if ( '' !== $token ) {
             SFAF_Chat_Credentials::set( 'postmark_token', $token );
+            // Is it accepted? One read-only call (1.28.0); no email is sent.
+            SFAF_Chat_Key_Status::check( 'postmark' );
         }
         SFAF_Chat_Contact::save( array(
             'enabled'        => $enabled,
@@ -188,7 +190,8 @@ class SFAF_Chat_Admin_Contact {
                     <tr>
                         <th scope="row"><label for="sfaf-chat-postmark">Postmark server token</label></th>
                         <td><input type="password" id="sfaf-chat-postmark" name="postmark_token" class="regular-text" value="" autocomplete="new-password">
-                            <p class="description"><?php echo $has_token ? 'A token is saved. Leave this blank to keep it, or paste a new one to replace it.' : 'No token saved yet.'; ?> Use a server token made for the chat in Postmark (Servers, then the chat server, then API Tokens). It is never shown here again. Mail is sent from <code><?php echo esc_html( SFAF_Chat_Contact::FROM ); ?></code>, which must be a confirmed sender in that Postmark account.</p></td>
+                            <p class="description"><?php echo $has_token ? 'A token is saved. Leave this blank to keep it, or paste a new one to replace it.' : 'No token saved yet.'; ?> Use a server token made for the chat in Postmark (Servers, then the chat server, then API Tokens). It is never shown here again. Mail is sent from <code><?php echo esc_html( SFAF_Chat_Contact::FROM ); ?></code>, which must be a confirmed sender in that Postmark account.</p>
+                            <?php SFAF_Chat_Key_Status::render( 'postmark' ); ?></td>
                     </tr>
                     <tr>
                         <th scope="row">Reply-To</th>

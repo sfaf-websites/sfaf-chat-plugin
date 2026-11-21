@@ -34,6 +34,7 @@ foreach ( array(
     'sfaf_chat_stats_since',
     'sfaf_chat_voice',
     'sfaf_chat_voices',
+    'sfaf_chat_key_status',
 ) as $sfaf_chat_option ) {
     delete_option( $sfaf_chat_option );
 }
