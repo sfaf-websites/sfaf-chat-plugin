@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.28.0
+Stable tag: 1.29.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,26 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.29.0 =
+* The chat keeps the conversation while a visitor browses the site. Three states:
+  centered (the familiar panel over a dimmed page, how it always first opens), docked (a
+  smaller window in the bottom-right corner, with no dimming, so the page stays usable),
+  and minimized (just the launcher). Centered has minimize, dock and close; docked has
+  minimize and maximize. Close and Esc now minimize instead of erasing the conversation.
+  The launcher brings back whichever state was last open, with the conversation intact
+  and no second welcome.
+* The conversation is kept in the browser tab's sessionStorage (never localStorage), so
+  it carries from page to page within one visit and disappears when the tab is closed.
+  On a new page it comes back quietly: docked if it was docked, otherwise at the
+  launcher. The centered panel never pops open by itself. Nothing new is stored on the
+  server.
+* Clear chat, a small link in the footer that asks for a second press, erases the
+  conversation and starts fresh with the welcome, suggested questions and any notice.
+* Phones keep the full-screen chat; there is no dock control there.
+* PRIVACY POLICY: while a tab is open, the chat's conversation is kept in that tab's
+  session storage on the visitor's own device, and is removed when the tab is closed or
+  the visitor presses Clear chat.
 
 = 1.28.0 =
 * Dashboard and Report are now one tab, Insights, in the report's look (square, flat,

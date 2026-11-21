@@ -5,8 +5,9 @@
  * ONE line in the site footer. This URL has no version in it and never changes:
  *   <script src="https://resources.sfaf.org/wp-json/sfaf-chat/v1/widget.js" defer></script>
  *
- * Self-contained: no dependencies, no CDN, no cookies, no storage. The thread
- * lives only in memory and is cleared when the panel closes.
+ * Self-contained: no dependencies, no CDN, no cookies, no localStorage. Since 1.29.0
+ * the conversation is kept in this tab's sessionStorage, so it follows the visitor from
+ * page to page and is gone when the tab closes. Clear chat empties it at once.
  *
  * Voice input uses the browser's own speech recognition. This code never records
  * audio and sends none to SFAF or Gemini. Only the resulting text goes anywhere, and
@@ -221,6 +222,25 @@
     '#sfaf-chat .sfaf-header button:focus-visible{outline-color:var(--sfaf-focus-on-dark);outline-offset:0;}',
     '#sfaf-chat .sfaf-header svg{width:18px;height:18px;flex:none;}',
     '#sfaf-chat .sfaf-header .sfaf-close{width:36px;justify-content:center;}',
+    // 1.29.0: minimize, dock and maximize, square like close. Centered shows minimize,
+    // dock and close; docked shows minimize and maximize.
+    '#sfaf-chat .sfaf-header .sfaf-min,#sfaf-chat .sfaf-header .sfaf-dock,#sfaf-chat .sfaf-header .sfaf-max{width:36px;justify-content:center;}',
+    '#sfaf-chat .sfaf-header .sfaf-max{display:none;}',
+    '#sfaf-chat.sfaf-docked .sfaf-header .sfaf-max{display:inline-flex;}',
+    '#sfaf-chat.sfaf-docked .sfaf-header .sfaf-dock,#sfaf-chat.sfaf-docked .sfaf-header .sfaf-close{display:none;}',
+
+    // Docked (1.29.0): a smaller window in the corner, above the launcher row, with no
+    // dimming, so the page behind can be read and used.
+    '#sfaf-chat.sfaf-docked .sfaf-panel{inset:auto;margin:0;right:24px;bottom:calc(var(--sfaf-dock-height,39px) + 16px);',
+    '  width:min(400px,calc(100vw - 32px));height:min(600px,calc(100vh - var(--sfaf-dock-height,39px) - 40px));}',
+    '#sfaf-chat.sfaf-docked .sfaf-overlay{opacity:0;visibility:hidden;pointer-events:none;}',
+    '#sfaf-chat.sfaf-docked .sfaf-header{padding:10px 8px 10px 16px;}',
+    '#sfaf-chat.sfaf-docked .sfaf-title{font-size:16px;}',
+    '#sfaf-chat.sfaf-docked .sfaf-header .sfaf-read{width:36px;padding:0;justify-content:center;}',
+    '#sfaf-chat.sfaf-docked .sfaf-header .sfaf-read span{display:none;}',
+    '#sfaf-chat.sfaf-docked .sfaf-messages{padding:18px 16px;}',
+    // Put back from an earlier page: no entrance, it was already there.
+    '#sfaf-chat .sfaf-restored{animation:none !important;}',
     '#sfaf-chat .sfaf-header .sfaf-read{padding:0 11px 0 9px;border-color:rgba(255,255,255,.34);}',
     '#sfaf-chat .sfaf-header .sfaf-read[aria-pressed="true"],#sfaf-chat .sfaf-header .sfaf-read[aria-pressed="true"]:hover{',
     '  background:var(--sfaf-surface);color:var(--sfaf-text);border-color:var(--sfaf-surface);}',
@@ -446,6 +466,10 @@
     '#sfaf-chat .sfaf-foot{flex:none;font-size:12px;color:var(--sfaf-muted);text-align:center;',
     '  padding:0 24px 12px;background:var(--sfaf-surface);}',
     '#sfaf-chat .sfaf-foot a{color:var(--sfaf-muted);text-decoration:underline;text-underline-offset:2px;}',
+    // Clear chat (1.29.0): as quiet as the footer's own link, never a button-looking button.
+    '#sfaf-chat .sfaf-foot .sfaf-clear{display:inline;background:none;border:0;padding:0;cursor:pointer;font-size:12px;',
+    '  color:var(--sfaf-muted);text-decoration:underline;text-underline-offset:2px;}',
+    '#sfaf-chat .sfaf-foot .sfaf-clear:hover{color:var(--sfaf-text);}',
 
     '#sfaf-chat .sfaf-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);',
     '  white-space:nowrap;}',
@@ -460,6 +484,9 @@
     '  #sfaf-chat .sfaf-form{padding:12px 12px 10px;}',
     '  #sfaf-chat .sfaf-hint{padding-left:16px;padding-right:16px;}',
     '  #sfaf-chat .sfaf-foot{padding:0 12px 10px;}',
+    // No corner to dock to on a phone: full screen whatever the state, no dock control.
+    '  #sfaf-chat .sfaf-header .sfaf-dock{display:none;}',
+    '  #sfaf-chat.sfaf-docked .sfaf-panel{inset:0;right:auto;bottom:auto;width:100%;height:100%;height:100dvh;}',
     '}',
 
     '@media (prefers-reduced-motion:reduce){',
@@ -513,6 +540,9 @@
 
   // Square-cornered line icons, to match the squared interface.
   var ICON_CLOSE = ['M18 6 6 18', 'M6 6l12 12'];
+  var ICON_MINIMIZE = ['M5 18h14'];
+  var ICON_DOCK = ['M3 4h18v16H3z', 'M12 12h6v5h-6z'];
+  var ICON_MAXIMIZE = ['M4 4h16v16H4z', 'M4 9h16'];
   var ICON_SEND = ['M4 12h15', 'M13 6l6 6-6 6'];
   var ICON_MIC = ['M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z', 'M19 11a7 7 0 0 1-14 0', 'M12 18v3'];
   var ICON_SPEAKER = ['M11 5 6 9H3v6h3l5 4z', 'M15.5 8.5a5 5 0 0 1 0 7', 'M18.5 5.5a9.5 9.5 0 0 1 0 13'];
@@ -631,6 +661,21 @@
     readBtn.appendChild(el('span', null, 'Read aloud'));
     header.appendChild(readBtn);
   }
+  // 1.29.0: minimize and dock (centered), minimize and maximize (docked). CSS shows the
+  // right ones for the state; the close button minimizes too.
+  function headerBtn(cls, labelText, icon) {
+    var b = el('button', cls);
+    b.type = 'button';
+    b.setAttribute('aria-label', labelText);
+    b.title = labelText;
+    b.appendChild(svg(icon));
+    header.appendChild(b);
+    return b;
+  }
+  var minBtn = headerBtn('sfaf-min', 'Minimize chat', ICON_MINIMIZE);
+  var dockBtn = headerBtn('sfaf-dock', 'Dock chat to the corner', ICON_DOCK);
+  var maxBtn = headerBtn('sfaf-max', 'Bring chat back to the center', ICON_MAXIMIZE);
+  closeBtn.setAttribute('aria-label', 'Close chat (your conversation is kept)');
   header.appendChild(closeBtn);
 
   var messages = el('div', 'sfaf-messages');
@@ -673,6 +718,12 @@
   foot.appendChild(document.createTextNode('Automated assistant · not medical advice · call '));
   foot.appendChild(telLink(PHONE));
   foot.appendChild(document.createTextNode(' for help'));
+  // Clear chat (1.29.0): tucked here on purpose, small and plain, away from the header's
+  // minimize and dock, and it asks for a second press.
+  foot.appendChild(document.createTextNode(' · '));
+  var clearBtn = el('button', 'sfaf-clear', 'Clear chat');
+  clearBtn.type = 'button';
+  foot.appendChild(clearBtn);
 
   panel.appendChild(header);
   panel.appendChild(messages);
@@ -968,6 +1019,20 @@
     return b;
   }
 
+  // The contact form's thank-you (1.21.0): a check beside the text, not an ordinary reply.
+  function successBubble(text) {
+    var done = addBubble('bot', text, 'sfaf-success');
+    var doneText = el('div', 'sfaf-success-text');
+    while (done.firstChild) doneText.appendChild(done.firstChild);
+    var tick = svg(['M12 2a10 10 0 1 1 0 20a10 10 0 1 1 0-20z', 'M7.5 12.5l3 3 6-6.5']);
+    tick.setAttribute('class', 'sfaf-success-icon');
+    tick.firstChild.setAttribute('class', 'sfaf-success-disc');
+    tick.lastChild.setAttribute('class', 'sfaf-success-tick');
+    done.appendChild(tick);
+    done.appendChild(doneText);
+    return done;
+  }
+
   function addLink(link) {
     if (!link || !isHttps(link.url)) return;
     var a = el('a', 'sfaf-linkbtn');
@@ -1182,12 +1247,12 @@
   var busy = false;
   var asked = false;     // has this conversation started?
   var inflight = null;   // AbortController of the current request
-  var session = 0;       // bumps on close, so a late reply can't land in a new thread
+  var session = 0;       // bumps on Clear chat, so a late reply can't land in a new thread
 
   /*
    * The insights report (1.23.0). Each reply carries its category {team, sub}; the
    * elements it adds are tagged with it, so an action is credited to the reply it came
-   * from. Kept in memory for this conversation only, cleared on close, and sent as
+   * from. Kept for this conversation only (this tab's sessionStorage since 1.29.0), cleared by Clear chat, and sent as
    * counts: the server never learns which conversation anything came from.
    */
   var cats = [];          // categories of this conversation's replies, by tag number
@@ -1197,6 +1262,30 @@
   var apptAt = 0;
 
   function catKey(c) { return c ? c.team + '|' + c.sub : ''; }
+
+  /*
+   * What the conversation showed, in order (1.29.0), so another page of this visit can
+   * show it again: {t: user|bot|success|card|link|donate|contact, ...}, with the reply's
+   * category tag (cat) and, for a reply, its speech token. Read aloud on a restored
+   * reply uses that token; an expired one is refused and the browser voice reads it.
+   */
+  var entries = [];
+  function record(e) { entries.push(e); }
+
+  function replay(e) {
+    if (e.t === 'user' && typeof e.text === 'string') addBubble('user', e.text);
+    else if (e.t === 'bot' && typeof e.text === 'string') {
+      var b = addBubble('bot', e.text, e.cls === 'sfaf-error' ? 'sfaf-error' : '');
+      if (e.caution && b.firstChild && b.firstChild.classList && b.firstChild.classList.contains('sfaf-p')) {
+        b.firstChild.classList.add('sfaf-caution');
+      }
+    }
+    else if (e.t === 'success' && typeof e.text === 'string') successBubble(e.text);
+    else if (e.t === 'card') addCard(e.card);
+    else if (e.t === 'link') addLink(e.link);
+    else if (e.t === 'donate') addDonate(e.donate);
+    else if (e.t === 'contact' && typeof e.label === 'string') addContact(e.label, typeof e.team === 'string' ? e.team : '');
+  }
 
   function catOf(node) {
     var tagged = node && node.closest ? node.closest('[data-sfaf-cat]') : null;
@@ -1208,7 +1297,7 @@
   function credit(cat) {
     var key = catKey(cat);
     var first = !!key && actedCats.indexOf(key) === -1;
-    if (first) actedCats.push(key);
+    if (first) { actedCats.push(key); persist(); }
     return first;
   }
 
@@ -1303,23 +1392,39 @@
         if (data.contact && typeof data.contact.label === 'string') {
           addContact(data.contact.label, typeof data.contact.team === 'string' ? data.contact.team : '');
         }
+        var tag = null;
         if (data.cat && typeof data.cat.team === 'string' && typeof data.cat.sub === 'string') {
-          var tag = cats.push({ team: data.cat.team, sub: data.cat.sub }) - 1;
+          tag = cats.push({ team: data.cat.team, sub: data.cat.sub }) - 1;
           for (var n = before; n < messages.childNodes.length; n++) {
             messages.childNodes[n].setAttribute('data-sfaf-cat', String(tag));
           }
           if (seenCats.indexOf(catKey(data.cat)) === -1) seenCats.push(catKey(data.cat));
         }
+        var speech = typeof data.speech === 'string' ? data.speech : '';
 
-        // Only completed exchanges enter the thread.
+        // Only completed exchanges enter the thread, and what they showed is kept for
+        // the next page of this visit (1.29.0).
         thread.push({ role: 'user', text: question });
         thread.push({ role: 'assistant', text: data.answer });
-        spokenAnswer(data.answer, typeof data.speech === 'string' ? data.speech : '');
+        record({ t: 'user', text: question });
+        record({ t: 'bot', text: data.answer, caution: data.harm_reduction === true, speech: speech, cat: tag });
+        if (data.card) record({ t: 'card', card: data.card, cat: tag });
+        else if (data.link) record({ t: 'link', link: data.link, cat: tag });
+        if (data.donate) record({ t: 'donate', donate: data.donate, cat: tag });
+        if (data.contact && typeof data.contact.label === 'string') {
+          entries = entries.filter(function (x) { return x.t !== 'contact'; });   // one offer at a time
+          record({ t: 'contact', label: data.contact.label, team: typeof data.contact.team === 'string' ? data.contact.team : '', cat: tag });
+        }
+        persist();
+        spokenAnswer(data.answer, speech);
       })
       .catch(function () {
         if (mySession !== session) return;
         showTyping(false);
         addBubble('bot', ERROR_TEXT, 'sfaf-error');
+        record({ t: 'user', text: question });
+        record({ t: 'bot', text: ERROR_TEXT, cls: 'sfaf-error' });
+        persist();
         spokenAnswer(ERROR_TEXT);
       })
       .then(function () {
@@ -1337,7 +1442,7 @@
    * email, and optionally a phone number and a few words. The transcript the
    * visitor can see goes with it, to the team the server chose ("team", sent back
    * as given; the server only accepts a team it has). Nothing is kept in the browser
-   * beyond this panel, and closing the chat clears it like the rest.
+   * beyond this panel: the form itself is never kept, only the offer (1.29.0).
    */
   var contactEl = null;
   var contactSeq = 0;
@@ -1455,16 +1560,13 @@
           form.remove();
           contactEl = null;
           if (formCat) credit(formCat);
-          // A success state with a check (1.21.0), not an ordinary reply.
-          var done = addBubble('bot', typeof data.message === 'string' ? data.message : 'Thanks. Someone will reach out soon.', 'sfaf-success');
-          var doneText = el('div', 'sfaf-success-text');
-          while (done.firstChild) doneText.appendChild(done.firstChild);
-          var tick = svg(['M12 2a10 10 0 1 1 0 20a10 10 0 1 1 0-20z', 'M7.5 12.5l3 3 6-6.5']);
-          tick.setAttribute('class', 'sfaf-success-icon');
-          tick.firstChild.setAttribute('class', 'sfaf-success-disc');
-          tick.lastChild.setAttribute('class', 'sfaf-success-tick');
-          done.appendChild(tick);
-          done.appendChild(doneText);
+          // A success state with a check (1.21.0), not an ordinary reply. The offer it
+          // came from is gone, so it is not restored on the next page either (1.29.0).
+          var doneMsg = typeof data.message === 'string' ? data.message : 'Thanks. Someone will reach out soon.';
+          successBubble(doneMsg);
+          entries = entries.filter(function (x) { return x.t !== 'contact'; });
+          record({ t: 'success', text: doneMsg });
+          persist();
           focusComposer();
         })
         .catch(function () {
@@ -1731,6 +1833,7 @@
     readBtn.addEventListener('click', function () {
       readingOn = !readingOn;
       readBtn.setAttribute('aria-pressed', readingOn ? 'true' : 'false');
+      persist();
       if (!readingOn) { stopSpeaking(); return; }
       // iOS only allows speech that follows a tap, and answers arrive later.
       unlockAudio(!lastAnswer);
@@ -1739,27 +1842,121 @@
     window.addEventListener('pagehide', stopSpeaking);
   }
 
-  /* ============================ OPEN / CLOSE ============================== */
+  /* ====================== CENTERED / DOCKED / MINIMIZED ===================== */
+  /*
+   * 1.29.0. The chat no longer forgets when it closes. Three states:
+   *   centered   the 560px panel over a dimmed page (how it always first opens)
+   *   docked     a smaller window at the bottom right; no dimming, the page stays usable
+   *   minimized  only the launcher; the conversation waits in the background
+   * The close button and Esc minimize. Only "Clear chat", tucked in the footer, wipes it.
+   *
+   * PERSISTENCE: sessionStorage, never localStorage. It lives as long as this tab and is
+   * gone when the tab closes, so leaving the site leaves nothing behind. Kept: what the
+   * conversation showed (STORE_THREAD) and the state and scroll position (STORE_UI). On a
+   * new page the conversation is restored silently, never by popping the centered panel:
+   * docked comes back docked, everything else minimized at the launcher.
+   */
+  var STORE_THREAD = 'sfaf-chat-thread';
+  var STORE_UI = 'sfaf-chat-ui';
+  var uiState = 'minimized';
+  var lastOpen = 'centered';   // what the launcher brings back
+
+  function narrow() {
+    return !!(window.matchMedia && window.matchMedia('(max-width:640px)').matches);
+  }
+
+  function store(key, value) {
+    try {
+      if (value === null) window.sessionStorage.removeItem(key);
+      else window.sessionStorage.setItem(key, JSON.stringify(value));
+    } catch (e) {}
+  }
+
+  function stored(key) {
+    try {
+      var v = JSON.parse(window.sessionStorage.getItem(key) || 'null');
+      return v && typeof v === 'object' ? v : null;
+    } catch (e) { return null; }
+  }
+
+  function persist() {
+    if (!entries.length) { store(STORE_THREAD, null); return; }
+    store(STORE_THREAD, {
+      v: 1, entries: entries, thread: thread, cats: cats, seenCats: seenCats, actedCats: actedCats,
+      asked: asked, lastAnswer: lastAnswer, lastSpeech: lastSpeech, reading: readingOn
+    });
+  }
+
+  var scrollTimer = null;
+  function persistUi() {
+    store(STORE_UI, { state: uiState, last: lastOpen, scroll: messages.scrollTop });
+  }
+  messages.addEventListener('scroll', function () {
+    if (scrollTimer) return;
+    scrollTimer = setTimeout(function () { scrollTimer = null; persistUi(); }, 250);
+  }, { passive: true });
+  window.addEventListener('pagehide', function () { persistUi(); persist(); });
+
+  function setState(next) {
+    uiState = next;
+    var shown = next !== 'minimized';
+    root.classList.toggle('sfaf-open', shown);
+    // Minimized keeps the docked class, so a docked window fades out where it is.
+    if (next === 'centered') root.classList.remove('sfaf-docked');
+    if (next === 'docked') root.classList.add('sfaf-docked');
+    if (shown) lastOpen = next;
+    panel.setAttribute('aria-modal', next === 'centered' ? 'true' : 'false');
+    launcher.setAttribute('aria-expanded', shown ? 'true' : 'false');
+    persistUi();
+  }
+
+  function greet() {
+    addBubble('bot', GREETING);
+    record({ t: 'bot', text: GREETING });
+  }
 
   function open() {
     if (isOpen()) return;
-    root.classList.add('sfaf-open');
-    launcher.setAttribute('aria-expanded', 'true');
-    if (!messages.childNodes.length) addBubble('bot', GREETING);
+    var at = messages.scrollTop;
+    setState(lastOpen === 'docked' && !narrow() ? 'docked' : 'centered');
+    if (!messages.querySelector('.sfaf-msg')) greet();
+    else messages.scrollTop = at;
     checkOnDevice();
     loadStarters();
     if (coarsePointer) panel.focus();
     else input.focus();
   }
 
-  // Closing clears the conversation. Nothing is kept.
-  function close() {
+  // Out of the way, the conversation kept. Speech and the microphone stop.
+  function minimize() {
     if (!isOpen()) return;
+    stopListening(true);
+    stopSpeaking();
+    clearNote();
+    setState('minimized');
+    launcher.focus();
+  }
+
+  function dock() {
+    if (narrow()) return;
+    setState('docked');
+    input.focus();
+  }
+
+  function maximize() {
+    setState('centered');
+    input.focus();
+  }
+
+  // Clear chat: everything goes, in memory and in sessionStorage, and a fresh welcome
+  // (greeting, starters and any notice) takes its place, as if the visitor had just come.
+  function clearChat() {
     session++;
     if (inflight) { try { inflight.abort(); } catch (e) {} inflight = null; }
     stopListening(true);
     stopSpeaking();
     thread = [];
+    entries = [];
     cats = [];
     seenCats = [];
     actedCats = [];
@@ -1776,21 +1973,78 @@
     messages.textContent = '';
     input.value = '';
     setBusy(false);
-    root.classList.remove('sfaf-open');
-    launcher.setAttribute('aria-expanded', 'false');
-    launcher.focus();
+    store(STORE_THREAD, null);
+    greet();
+    loadStarters();
+    persistUi();
+    focusComposer();
   }
 
   launcher.addEventListener('click', open);
-  closeBtn.addEventListener('click', close);
+  closeBtn.addEventListener('click', minimize);
+  minBtn.addEventListener('click', minimize);
+  dockBtn.addEventListener('click', dock);
+  maxBtn.addEventListener('click', maximize);
 
-  // Clicking the dimmed page deliberately does nothing: closing erases the
-  // conversation, which a stray click shouldn't do. Focus stays in the panel and the
-  // page behind stays still.
+  // Two presses, so one stray tap never wipes a conversation.
+  var clearArmed = null;
+  clearBtn.addEventListener('click', function () {
+    if (clearArmed) {
+      clearTimeout(clearArmed);
+      clearArmed = null;
+      clearBtn.textContent = 'Clear chat';
+      clearChat();
+      return;
+    }
+    clearBtn.textContent = 'Press again to clear';
+    clearArmed = setTimeout(function () { clearArmed = null; clearBtn.textContent = 'Clear chat'; }, 4000);
+  });
+
+  // Clicking the dimmed page deliberately does nothing, so a stray click never hides the
+  // conversation by surprise. Focus stays in the panel and the page behind stays still.
   function holdPage(e) { e.preventDefault(); }
   overlay.addEventListener('mousedown', holdPage);
   overlay.addEventListener('wheel', holdPage, { passive: false });
   overlay.addEventListener('touchmove', holdPage, { passive: false });
+
+  // A conversation from an earlier page of this visit, put back as it was, without
+  // its entrance animations. Nothing is asked of the server but the live notices.
+  function restore() {
+    var saved = stored(STORE_THREAD);
+    if (!saved || saved.v !== 1 || !Array.isArray(saved.entries) || !saved.entries.length) return;
+    thread = Array.isArray(saved.thread) ? saved.thread : [];
+    cats = Array.isArray(saved.cats) ? saved.cats : [];
+    seenCats = Array.isArray(saved.seenCats) ? saved.seenCats : [];
+    actedCats = Array.isArray(saved.actedCats) ? saved.actedCats : [];
+    asked = saved.asked === true;
+    lastAnswer = typeof saved.lastAnswer === 'string' ? saved.lastAnswer : '';
+    lastSpeech = typeof saved.lastSpeech === 'string' ? saved.lastSpeech : '';
+    saved.entries.forEach(function (e) {
+      if (!e || typeof e !== 'object') return;
+      var before = messages.childNodes.length;
+      replay(e);
+      for (var n = before; n < messages.childNodes.length; n++) {
+        var node = messages.childNodes[n];
+        node.classList.add('sfaf-restored');
+        if (typeof e.cat === 'number') node.setAttribute('data-sfaf-cat', String(e.cat));
+      }
+      entries.push(e);
+    });
+    if (saved.reading === true && readBtn) {
+      readingOn = true;
+      readBtn.setAttribute('aria-pressed', 'true');
+    }
+    var ui = stored(STORE_UI) || {};
+    lastOpen = ui.last === 'docked' ? 'docked' : 'centered';
+    if (ui.state === 'docked' && !narrow()) {
+      setState('docked');
+      checkOnDevice();
+      loadStarters();
+    } else {
+      setState('minimized');
+    }
+    messages.scrollTop = typeof ui.scroll === 'number' ? ui.scroll : messages.scrollHeight;
+  }
 
   form.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -1808,15 +2062,15 @@
   }
 
   root.addEventListener('keydown', function (e) {
-    // Esc closes from anywhere inside the panel.
+    // Esc minimizes from anywhere inside the panel. The conversation stays.
     if (e.key === 'Escape' || e.key === 'Esc') {
       e.stopPropagation();
-      close();
+      minimize();
       return;
     }
 
-    // The panel is modal, so Tab stays inside it.
-    if (e.key !== 'Tab' || !isOpen()) return;
+    // Centered, the panel is modal, so Tab stays inside it. Docked, it is not.
+    if (e.key !== 'Tab' || uiState !== 'centered') return;
     var items = focusables();
     if (!items.length) return;
     var first = items[0];
@@ -1830,4 +2084,6 @@
       first.focus();
     }
   });
+
+  restore();
 })();
