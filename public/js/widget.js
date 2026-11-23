@@ -1033,30 +1033,36 @@
     return done;
   }
 
+  // Each add* returns the label it showed, or '' when it showed nothing, so Read
+  // aloud can name the buttons (1.29.0).
   function addLink(link) {
-    if (!link || !isHttps(link.url)) return;
+    if (!link || !isHttps(link.url)) return '';
     var a = el('a', 'sfaf-linkbtn');
     a.href = link.url;
     a.target = '_blank';
     a.rel = 'noopener';
-    markFlow(a, link.label || 'Learn more');
+    var label = link.label || 'Learn more';
+    markFlow(a, label);
     messages.appendChild(a);
     scrollDown();
+    return String(label);
   }
 
   function addDonate(d) {
-    if (!d || !isHttps(d.url)) return;
+    if (!d || !isHttps(d.url)) return '';
     var a = el('a', 'sfaf-donatebtn');
     a.href = d.url;
     a.target = '_blank';
     a.rel = 'noopener';
-    markFlow(a, d.label || 'Donate');
+    var label = d.label || 'Donate';
+    markFlow(a, label);
     messages.appendChild(a);
     scrollDown();
+    return String(label);
   }
 
   function addCard(card) {
-    if (!card || !isHttps(card.url)) return;
+    if (!card || !isHttps(card.url)) return '';
     var c = el('div', 'sfaf-card');
 
     // Image only from SFAF domains; otherwise keep the card without it.
@@ -1078,7 +1084,8 @@
     body.appendChild(el('div', 'sfaf-card-title', card.title || ''));
     if (card.subtitle) body.appendChild(el('div', 'sfaf-card-sub', card.subtitle));
     var cta = el('a', 'sfaf-card-cta');
-    markFlow(cta, card.cta || (card.type === 'event' ? 'Event details' : 'Read more'), true);
+    var label = card.cta || (card.type === 'event' ? 'Event details' : 'Read more');
+    markFlow(cta, label, true);
     cta.href = card.url;
     if (card.type === 'event') cta.setAttribute('data-sfaf-kind', 'event');
     cta.target = '_blank';
@@ -1088,6 +1095,7 @@
 
     messages.appendChild(c);
     scrollDown();
+    return String(label);
   }
 
   // A message from the widget, not the assistant. It goes in the log, so it is shown
@@ -1386,12 +1394,15 @@
             bubble.firstChild.classList.contains('sfaf-p')) {
           bubble.firstChild.classList.add('sfaf-caution');
         }
-        if (data.card) addCard(data.card);
-        else if (data.link) addLink(data.link);
-        if (data.donate) addDonate(data.donate);
+        // The buttons' labels, as shown and in order, for Read aloud's closing line.
+        var buttons = [];
+        if (data.card) buttons.push(addCard(data.card));
+        else if (data.link) buttons.push(addLink(data.link));
+        if (data.donate) buttons.push(addDonate(data.donate));
         if (data.contact && typeof data.contact.label === 'string') {
-          addContact(data.contact.label, typeof data.contact.team === 'string' ? data.contact.team : '');
+          buttons.push(addContact(data.contact.label, typeof data.contact.team === 'string' ? data.contact.team : ''));
         }
+        buttons = buttons.filter(function (x) { return x; });
         var tag = null;
         if (data.cat && typeof data.cat.team === 'string' && typeof data.cat.sub === 'string') {
           tag = cats.push({ team: data.cat.team, sub: data.cat.sub }) - 1;
@@ -1416,7 +1427,7 @@
           record({ t: 'contact', label: data.contact.label, team: typeof data.contact.team === 'string' ? data.contact.team : '', cat: tag });
         }
         persist();
-        spokenAnswer(data.answer, speech);
+        spokenAnswer(data.answer, speech, buttons);
       })
       .catch(function () {
         if (mySession !== session) return;
@@ -1457,6 +1468,7 @@
     contactEl = b;
     messages.appendChild(b);
     scrollDown();
+    return String(label);
   }
 
   // A labelled input, or a textarea for 'textarea'. Optional ones say so in the label.
@@ -1699,6 +1711,26 @@
   }
 
   var lastSpeech = '';      // the server's token for lastAnswer, or ''
+  var lastButtons = [];     // the labels of lastAnswer's buttons (1.29.0)
+
+  /*
+   * After a reply, one closing sentence names the buttons shown with it, so someone
+   * listening knows they are there (1.29.0): "You can also: Donate, Contact our team."
+   * Labels exactly as shown; nothing when there are none. The same as
+   * SFAF_Chat_Voice::closing(), which says it for Google's voice; keep the two in step.
+   * Spanish when the Spanish voice reads it. REVIEW:spanish: "También puedes:"
+   * waits on a native speaker's review.
+   */
+  function closingLine(buttons, es) {
+    if (!buttons || !buttons.length) return '';
+    var line = (es ? 'Tambi\u00e9n puedes: ' : 'You can also: ') + buttons.join(', ');
+    return /[.!?]$/.test(line) ? line : line + '.';
+  }
+
+  function withButtons(text, buttons) {
+    var line = closingLine(buttons, /^es\b/i.test(speechLang()));
+    return line ? text + '\n\n' + line : text;
+  }
   var speakRun = 0;         // bumped by every stop, so a late part never plays
   var player = null;        // one audio element, reused, so iOS keeps it unlocked
   var playerUnlocked = false;
@@ -1772,10 +1804,10 @@
   }
 
   // One part from the server, or a rejection: any error, refusal or timeout.
-  function fetchPart(text, token, i) {
+  function fetchPart(text, token, buttons, i) {
     var ctrl = window.AbortController ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, SPEAK_TIMEOUT_MS);
-    return fetch(SPEAK_URL, requestOptions({ text: text, token: token, part: i }, ctrl ? ctrl.signal : undefined))
+    return fetch(SPEAK_URL, requestOptions({ text: text, buttons: buttons, token: token, part: i }, ctrl ? ctrl.signal : undefined))
       .then(function (res) { return res.json(); })
       .then(function (d) {
         clearTimeout(timer);
@@ -1786,20 +1818,22 @@
 
   // Google's voice, part by part, the next one fetched while this one plays. On any
   // failure the browser's voice reads whatever is left, and the visitor sees nothing.
-  function cloudSpeak(text, token) {
+  // The server adds the closing line, signed with the answer; the browser voice,
+  // taking over before the server's parts arrived, adds its own.
+  function cloudSpeak(text, token, buttons) {
     var run = speakRun;
     var texts = null;
     function fallback(from) {
       if (run !== speakRun) return;
       speakRun++;
       if (player) { player.onended = player.onerror = null; try { player.pause(); } catch (e) {} }
-      browserSpeak(texts ? texts.slice(from).join(' ') : text);
+      browserSpeak(texts ? texts.slice(from).join(' ') : withButtons(text, buttons));
     }
     function play(i, pending) {
       pending.then(function (d) {
         if (run !== speakRun) return;
         if (Array.isArray(d.texts)) texts = d.texts;
-        var next = i + 1 < d.parts ? fetchPart(text, token, i + 1) : null;
+        var next = i + 1 < d.parts ? fetchPart(text, token, buttons, i + 1) : null;
         if (next) next.catch(function () {});
         var url = audioUrl(d.audio, d.type);
         if (!url) { fallback(i); return; }
@@ -1814,19 +1848,21 @@
         if (p && p.catch) p.catch(function () { fallback(i); });
       }, function () { fallback(i); });
     }
-    play(0, fetchPart(text, token, 0));
+    play(0, fetchPart(text, token, buttons, 0));
   }
 
-  function speak(text, token) {
+  function speak(text, token, buttons) {
+    buttons = buttons || [];
     stopSpeaking();
-    if (cloudVoice && token) cloudSpeak(text, token);
-    else browserSpeak(text);
+    if (cloudVoice && token) cloudSpeak(text, token, buttons);
+    else browserSpeak(withButtons(text, buttons));
   }
 
-  function spokenAnswer(text, token) {
+  function spokenAnswer(text, token, buttons) {
     lastAnswer = text;
     lastSpeech = token || '';
-    if (readingOn) speak(text, lastSpeech);
+    lastButtons = buttons || [];
+    if (readingOn) speak(text, lastSpeech, lastButtons);
   }
 
   if (readBtn) {
@@ -1837,7 +1873,7 @@
       if (!readingOn) { stopSpeaking(); return; }
       // iOS only allows speech that follows a tap, and answers arrive later.
       unlockAudio(!lastAnswer);
-      if (lastAnswer) speak(lastAnswer, lastSpeech);
+      if (lastAnswer) speak(lastAnswer, lastSpeech, lastButtons);
     });
     window.addEventListener('pagehide', stopSpeaking);
   }
@@ -1883,7 +1919,7 @@
     if (!entries.length) { store(STORE_THREAD, null); return; }
     store(STORE_THREAD, {
       v: 1, entries: entries, thread: thread, cats: cats, seenCats: seenCats, actedCats: actedCats,
-      asked: asked, lastAnswer: lastAnswer, lastSpeech: lastSpeech, reading: readingOn
+      asked: asked, lastAnswer: lastAnswer, lastSpeech: lastSpeech, lastButtons: lastButtons, reading: readingOn
     });
   }
 
@@ -1965,6 +2001,7 @@
     asked = false;
     lastAnswer = '';
     lastSpeech = '';
+    lastButtons = [];
     noteEl = null;
     startersEl = null;
     alertsEl = null;
@@ -2019,6 +2056,8 @@
     asked = saved.asked === true;
     lastAnswer = typeof saved.lastAnswer === 'string' ? saved.lastAnswer : '';
     lastSpeech = typeof saved.lastSpeech === 'string' ? saved.lastSpeech : '';
+    lastButtons = Array.isArray(saved.lastButtons)
+      ? saved.lastButtons.filter(function (x) { return typeof x === 'string' && x; }).slice(0, 6) : [];
     saved.entries.forEach(function (e) {
       if (!e || typeof e !== 'object') return;
       var before = messages.childNodes.length;

@@ -1046,14 +1046,16 @@ class SFAF_Chat_Endpoint {
             $log_id
         );
 
+        // "Contact our team": set up, and by OFFER_RULE; routed to the model's team.
+        $contact = SFAF_Chat_Contact::offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered, $contact_team, $warm_lead );
+
         return new WP_REST_Response( array(
             'ok'       => true,
             'answer'   => $answer,
             'link'     => $link,
             'card'     => $card,
             'in_scope' => $answered_in_scope,
-            // "Contact our team": set up, and by OFFER_RULE; routed to the model's team.
-            'contact'  => SFAF_Chat_Contact::offer( $topic, $flag, $page, $answer, $wants_person, $fully_answered, $contact_team, $warm_lead ),
+            'contact'  => $contact,
             'donate'   => $donate,
             // The answer's first paragraph is the harm reduction label: the widget shows
             // it as a caution (1.20.0). Styling only; the text is already in the answer.
@@ -1062,8 +1064,9 @@ class SFAF_Chat_Endpoint {
             // tell the next question what this conversation has covered (1.23.0).
             'cat'      => array( 'team' => $report_team, 'sub' => $report_sub ),
             // Read aloud (1.27.0): a signature over this answer, so /speak voices only
-            // what the chat said. Null while no Text-to-Speech key is set.
-            'speech'   => SFAF_Chat_Voice::token( $answer ),
+            // what the chat said. Null while no Text-to-Speech key is set. It covers the
+            // labels of the reply's buttons too, which /speak names after it (1.29.0).
+            'speech'   => SFAF_Chat_Voice::token( $answer, SFAF_Chat_Voice::buttons( $link, $card, $donate, $contact ) ),
         ), 200 );
     }
 

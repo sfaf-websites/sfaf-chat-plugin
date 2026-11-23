@@ -65,6 +65,8 @@ class SFAF_Chat_Voice {
     const FIRST_PART_CHARS = 300;   // short, so the first words start soon
     const PART_CHARS       = 900;   // well inside Google's 5000-byte input limit
     const MAX_PARTS        = 12;
+    const MAX_BUTTONS      = 6;     // a reply shows four at most
+    const MAX_BUTTON_CHARS = 200;
     const TIMEOUT_SECONDS  = 15;
 
     const RATE_WINDOW = 10 * MINUTE_IN_SECONDS;
@@ -297,23 +299,83 @@ class SFAF_Chat_Voice {
         return wp_salt( 'auth' ) . '|sfaf-chat-voice';
     }
 
+    /**
+     * What a token signs: the answer, and the labels of the buttons shown with it
+     * (1.29.0), so the closing "You can also:" line is the chat's words as well. With
+     * no buttons it is the answer alone, as in 1.27.0. /speak refuses both separators
+     * in what it is sent, so one signed text can't be passed off as another.
+     */
+    private static function signed( $answer, array $buttons ) {
+        return array() === $buttons ? (string) $answer : (string) $answer . "\x1F" . implode( "\x1E", $buttons );
+    }
+
     /** The token an ask reply carries, or null while no key is set. */
-    public static function token( $answer ) {
+    public static function token( $answer, array $buttons = array() ) {
         if ( ! self::ready() ) {
             return null;
         }
         $exp = time() + self::TOKEN_HOURS * HOUR_IN_SECONDS;
-        return $exp . '.' . hash_hmac( 'sha256', $exp . '|' . (string) $answer, self::secret() );
+        return $exp . '.' . hash_hmac( 'sha256', $exp . '|' . self::signed( $answer, $buttons ), self::secret() );
     }
 
-    public static function verify( $answer, $token ) {
+    public static function verify( $answer, $token, array $buttons = array() ) {
         if ( ! is_string( $answer ) || ! is_string( $token ) || ! preg_match( '/^(\d{10})\.([0-9a-f]{64})$/', $token, $m ) ) {
             return false;
         }
         if ( (int) $m[1] < time() ) {
             return false;
         }
-        return hash_equals( hash_hmac( 'sha256', $m[1] . '|' . $answer, self::secret() ), $m[2] );
+        return hash_equals( hash_hmac( 'sha256', $m[1] . '|' . self::signed( $answer, $buttons ), self::secret() ), $m[2] );
+    }
+
+    /* ============================= THE BUTTONS ============================ */
+
+    /**
+     * The labels of the buttons the widget shows under a reply, as it shows them and
+     * in its order: the card's button or the link, then Donate, then the contact offer.
+     * The same fallbacks as addCard, addLink, addDonate and addContact in widget.js,
+     * and, as there, only for an https address. Not the booking link: that sits in
+     * the answer's text and is read there already.
+     *
+     * @return string[]
+     */
+    public static function buttons( $link, $card, $donate, $contact ) {
+        $https = function ( $item ) {
+            return is_array( $item ) && 1 === preg_match( '#^https://#i', (string) ( $item['url'] ?? '' ) );
+        };
+        $text = function ( $item, $key ) {
+            return is_array( $item ) && is_scalar( $item[ $key ] ?? null ) ? (string) $item[ $key ] : '';
+        };
+        $labels = array();
+        if ( is_array( $card ) ) {
+            if ( $https( $card ) ) {
+                $labels[] = '' !== $text( $card, 'cta' ) ? $text( $card, 'cta' ) : ( 'event' === $text( $card, 'type' ) ? 'Event details' : 'Read more' );
+            }
+        } elseif ( $https( $link ) ) {
+            $labels[] = '' !== $text( $link, 'label' ) ? $text( $link, 'label' ) : 'Learn more';
+        }
+        if ( $https( $donate ) ) {
+            $labels[] = '' !== $text( $donate, 'label' ) ? $text( $donate, 'label' ) : 'Donate';
+        }
+        if ( is_array( $contact ) && is_string( $contact['label'] ?? null ) && '' !== $contact['label'] ) {
+            $labels[] = $contact['label'];
+        }
+        return array_slice( $labels, 0, self::MAX_BUTTONS );
+    }
+
+    /**
+     * The closing sentence that names those buttons for a listener: "You can also:
+     * Donate, Contact our team." Empty with no buttons. The same as closingLine() in
+     * widget.js; keep the two in step.
+     *
+     * REVIEW:spanish. "También puedes:" waits on a native speaker's review.
+     */
+    public static function closing( array $buttons, $lang = 'en' ) {
+        if ( array() === $buttons ) {
+            return '';
+        }
+        $line = ( 'es' === $lang ? 'También puedes: ' : 'You can also: ' ) . implode( ', ', $buttons );
+        return preg_match( '/[.!?]$/u', $line ) ? $line : $line . '.';
     }
 
     /* ============================ WHAT IS SAID ============================ */
@@ -458,7 +520,9 @@ class SFAF_Chat_Voice {
     }
 
     /**
-     * POST /speak {text, token, part}: one part of a signed answer, as audio.
+     * POST /speak {text, buttons, token, part}: one part of a signed answer, as audio.
+     * After the answer, a closing line names the reply's buttons (1.29.0); their
+     * labels are signed with it, so that line is the chat's words too.
      * The widget reads with the browser's voice on any answer but 200.
      *
      * @return array{status:int,body:array}
@@ -474,14 +538,28 @@ class SFAF_Chat_Voice {
         if ( ! is_string( $text ) || '' === trim( $text ) || mb_strlen( $text ) > self::MAX_ANSWER_CHARS ) {
             return $no( 400, 'Nothing to read' );
         }
-        if ( ! self::verify( $text, $body['token'] ?? null ) ) {
+        if ( preg_match( '/[\x1E\x1F]/', $text ) ) {
+            return $no( 400, 'Nothing to read' );
+        }
+        $buttons = $body['buttons'] ?? array();
+        if ( ! is_array( $buttons ) || count( $buttons ) > self::MAX_BUTTONS || array_values( $buttons ) !== $buttons ) {
+            return $no( 400, 'Bad buttons' );
+        }
+        foreach ( $buttons as $b ) {
+            if ( ! is_string( $b ) || '' === $b || mb_strlen( $b ) > self::MAX_BUTTON_CHARS || preg_match( '/[\x1E\x1F]/', $b ) ) {
+                return $no( 400, 'Bad buttons' );
+            }
+        }
+        if ( ! self::verify( $text, $body['token'] ?? null, $buttons ) ) {
             return $no( 403, 'Not a reply from the chat' );
         }
+        // The answer decides the language, and the closing line follows it.
         $lang = self::language( self::spoken( $text ) );
         if ( '' === $lang ) {
             return $no( 422, 'Browser voice' );
         }
-        $parts = self::parts( self::spoken( $text, $lang ) );
+        $closing = self::closing( $buttons, $lang );
+        $parts   = self::parts( self::spoken( '' === $closing ? $text : $text . "\n\n" . $closing, $lang ) );
         $i     = $body['part'] ?? 0;
         if ( ! is_int( $i ) || $i < 0 || $i >= count( $parts ) ) {
             return $no( 400, 'No such part' );

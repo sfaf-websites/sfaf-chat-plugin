@@ -49,6 +49,13 @@ use the Check for updates link in the plugin's row.
 * Clear chat, a small link in the footer that asks for a second press, erases the
   conversation and starts fresh with the welcome, suggested questions and any notice.
 * Phones keep the full-screen chat; there is no dock control there.
+* Read aloud names the buttons under a reply. After the answer, one closing sentence
+  lists them with their labels as shown: "You can also: Donate, Contact our team." In
+  Spanish (when the Spanish voice reads), "También puedes:" and the labels as shown;
+  that wording waits on a native speaker's review. Nothing is added when a reply has no
+  buttons. The booking link sits in the reply's text and is read there, as before. With
+  Google's voice the labels are signed with the answer, so the speech route still reads
+  only what the chat showed.
 * PRIVACY POLICY: while a tab is open, the chat's conversation is kept in that tab's
   session storage on the visitor's own device, and is removed when the tab is closed or
   the visitor presses Clear chat.
