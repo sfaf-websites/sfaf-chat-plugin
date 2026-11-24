@@ -4,9 +4,16 @@
  * due to weather" or "Strut hours changed this week". NOT calendar closures, which
  * the SFAF Calendar owns (see SFAF_Chat_Closures).
  *
- * Each has a start date and an optional end date, Pacific, both inclusive. An
- * alert is ACTIVE from the start of its first day through the end of its last;
- * with no end date it stays active until someone deletes it. Active alerts are
+ * Each has a start date and an end date, Pacific, both inclusive. An alert is
+ * ACTIVE from the start of its first day through the end of its last.
+ *
+ * ONE DAY BY DEFAULT (1.31.0). Saved with no end date, an alert is for its start
+ * day only (end = start), and with no start date it starts the day it is saved.
+ * Before 1.31.0 no end date meant "until deleted". Alerts stored that way (end '')
+ * keep that meaning until an administrator applies the new rule on the screen,
+ * which first lists each one and what it would become (legacy(), migrate()).
+ * Applying it deletes nothing: those alerts are marked "kept", and the daily
+ * cleanup leaves them alone. Active alerts are
  * shown as a notice when the chat opens (through the /starters route, which is
  * never cached) and are handed to the model as current information, so answers
  * don't contradict them. Scheduled and ended alerts do nothing.
@@ -16,9 +23,11 @@
  * KEEP_ENDED_DAYS ago, so the list doesn't fill with old ones.
  *
  * Stored in the sfaf_chat_alerts option, not autoloaded. Written only through
- * save() and delete(), from the Welcome & Alerts screen. The text is plain: tags
- * are stripped and whitespace collapsed on the way in, and the widget renders it
- * with textContent.
+ * save(), delete() and migrate(), from the Welcome & Alerts screen. THE TEXT IS
+ * STORED EXACTLY AS TYPED (1.31.0; before, tags were stripped and whitespace
+ * collapsed): text with HTML tags, or over MAX_TEXT, is refused rather than changed.
+ * Safe as given: only administrators write it, the admin screen escapes it, and the
+ * widget renders it with textContent. Edit (1.31.0) updates an alert in place.
  *
  * ONE LINK (1.28.0): an optional web address and link text. Staff write it, so it is
  * trusted: the widget shows it as given, outside the link allowlist that holds the
@@ -45,7 +54,9 @@ class SFAF_Chat_Alerts {
     /**
      * Every alert, soonest start first.
      *
-     * @return array[] id, text, start, end ('' = no end date), url, link_text ('' = none)
+     * @return array[] id, text, start, end ('' = saved before 1.31.0 with no end date:
+     *                 until deleted), url, link_text ('' = none), kept (moved to the
+     *                 one-day rule by migrate(), never removed by the cleanup)
      */
     public static function all() {
         $raw = get_option( self::OPTION, array() );
@@ -54,7 +65,8 @@ class SFAF_Chat_Alerts {
             if ( ! is_array( $a ) ) {
                 continue;
             }
-            $text  = self::clean_text( $a['text'] ?? '' );
+            // As stored, never reworded. An all-blank text is no alert.
+            $text  = is_string( $a['text'] ?? null ) && '' !== trim( $a['text'] ) ? $a['text'] : '';
             $start = self::clean_date( $a['start'] ?? '' );
             $end   = self::clean_date( $a['end'] ?? '' );
             if ( '' === $text || '' === $start ) {
@@ -65,7 +77,8 @@ class SFAF_Chat_Alerts {
             }
             $url   = self::clean_url( $a['url'] ?? '' );
             $out[] = array( 'id' => (string) $id, 'text' => $text, 'start' => $start, 'end' => $end,
-                'url' => $url, 'link_text' => '' === $url ? '' : self::clean_link_text( $a['link_text'] ?? '' ) );
+                'url' => $url, 'link_text' => '' === $url ? '' : self::clean_link_text( $a['link_text'] ?? '' ),
+                'kept' => ! empty( $a['kept'] ) );
         }
         usort( $out, function ( $a, $b ) {
             return array( $a['start'], $a['id'] ) <=> array( $b['start'], $b['id'] );
@@ -94,23 +107,36 @@ class SFAF_Chat_Alerts {
     }
 
     /**
-     * Create or update an alert.
+     * Create an alert, or with $must_exist update the one with this id in place
+     * (Edit). No start date: today. No end date: the start date, so one day.
      *
      * @return string|WP_Error The id.
      */
-    public static function save( $id, $text, $start, $end = '', $url = '', $link_text = '' ) {
-        $text      = self::clean_text( $text );
-        $start     = self::clean_date( $start );
-        $end       = self::clean_date( $end );
+    public static function save( $id, $text, $start, $end = '', $url = '', $link_text = '', $must_exist = false ) {
+        $text      = (string) $text;
+        $raw_start = trim( (string) $start );
+        $start     = '' === $raw_start ? self::today() : self::clean_date( $raw_start );
+        $raw_end   = trim( (string) $end );
+        $end       = '' === $raw_end ? $start : self::clean_date( $raw_end );
         $raw_url   = trim( (string) $url );
         $url       = self::clean_url( $raw_url );
         $link_text = self::clean_link_text( $link_text );
 
-        if ( '' === $text ) {
+        if ( '' === trim( $text ) ) {
             return new WP_Error( 'sfaf_chat_alert_text', 'Write the alert text.' );
         }
-        if ( '' === $start ) {
-            return new WP_Error( 'sfaf_chat_alert_start', 'Give the alert a start date.' );
+        // Refused, never changed: the text is saved exactly as typed.
+        if ( ! preg_match( '//u', $text ) ) {
+            return new WP_Error( 'sfaf_chat_alert_text', 'The alert text has characters that could not be read. Type it again.' );
+        }
+        if ( mb_strlen( $text ) > self::MAX_TEXT ) {
+            return new WP_Error( 'sfaf_chat_alert_long', 'The alert text is longer than ' . self::MAX_TEXT . ' characters. Shorten it.' );
+        }
+        if ( preg_match( '#</?[a-z!][^>]*>#i', $text ) ) {
+            return new WP_Error( 'sfaf_chat_alert_markup', 'The alert text can\'t contain HTML tags. Use plain text.' );
+        }
+        if ( '' === $start || '' === $end ) {
+            return new WP_Error( 'sfaf_chat_alert_date', 'That date is not a real date.' );
         }
         if ( '' !== $end && $end < $start ) {
             return new WP_Error( 'sfaf_chat_alert_backwards', 'The end date is before the start date.' );
@@ -126,6 +152,9 @@ class SFAF_Chat_Alerts {
         $raw = is_array( $raw ) ? $raw : array();
 
         $id = (string) $id;
+        if ( $must_exist && ( '' === $id || ! isset( $raw[ $id ] ) ) ) {
+            return new WP_Error( 'sfaf_chat_alert_gone', 'That alert no longer exists, so nothing was changed.' );
+        }
         if ( '' === $id || ! isset( $raw[ $id ] ) ) {
             if ( count( $raw ) >= self::MAX ) {
                 return new WP_Error( 'sfaf_chat_alert_full', 'There are already ' . self::MAX . ' alerts. Delete an old one first.' );
@@ -138,6 +167,56 @@ class SFAF_Chat_Alerts {
         return $id;
     }
 
+    /** Alerts saved before 1.31.0 with no end date (still "until deleted"). */
+    public static function legacy() {
+        return array_values( array_filter( self::all(), function ( $a ) {
+            return '' === $a['end'];
+        } ) );
+    }
+
+    /**
+     * The one-day rule for the alerts legacy() lists: end = start. Nothing is
+     * deleted, now or later: they are marked kept, which the cleanup skips.
+     *
+     * @return int How many changed.
+     */
+    public static function migrate() {
+        $raw = get_option( self::OPTION, array() );
+        if ( ! is_array( $raw ) ) {
+            return 0;
+        }
+        $n = 0;
+        foreach ( $raw as $id => $a ) {
+            if ( ! is_array( $a ) || '' !== self::clean_date( $a['end'] ?? '' ) || '' === self::clean_date( $a['start'] ?? '' ) ) {
+                continue;
+            }
+            $raw[ $id ]['end']  = self::clean_date( $a['start'] );
+            $raw[ $id ]['kept'] = true;
+            $n++;
+        }
+        if ( $n > 0 ) {
+            update_option( self::OPTION, $raw, false );
+        }
+        return $n;
+    }
+
+    /**
+     * The dates for the screen, in the brand's style (no ordinals): "December 31,
+     * 2026" for one day, "December 21, 2026 to January 3, 2027" for a range.
+     */
+    public static function dates_label( array $a ) {
+        if ( '' === $a['end'] ) {
+            return 'From ' . self::day( $a['start'] ) . ', until deleted';
+        }
+        return $a['end'] === $a['start'] ? self::day( $a['start'] ) : self::day( $a['start'] ) . ' to ' . self::day( $a['end'] );
+    }
+
+    /** "December 31, 2026" for a Y-m-d date. */
+    public static function day( $ymd ) {
+        $d = DateTimeImmutable::createFromFormat( '!Y-m-d', (string) $ymd, SFAF_Chat_Core::timezone() );
+        return $d ? $d->format( 'F j, Y' ) : (string) $ymd;
+    }
+
     public static function delete( $id ) {
         $raw = get_option( self::OPTION, array() );
         if ( ! is_array( $raw ) || ! isset( $raw[ (string) $id ] ) ) {
@@ -148,7 +227,7 @@ class SFAF_Chat_Alerts {
         return true;
     }
 
-    /** Daily: delete alerts that ended more than KEEP_ENDED_DAYS ago. */
+    /** Daily: delete alerts that ended more than KEEP_ENDED_DAYS ago, never a kept one. */
     public static function prune() {
         $raw = get_option( self::OPTION, array() );
         if ( ! is_array( $raw ) || array() === $raw ) {
@@ -158,7 +237,7 @@ class SFAF_Chat_Alerts {
         $changed = false;
         foreach ( $raw as $id => $a ) {
             $end = self::clean_date( is_array( $a ) ? ( $a['end'] ?? '' ) : '' );
-            if ( '' !== $end && $end < $cutoff ) {
+            if ( '' !== $end && $end < $cutoff && empty( $a['kept'] ) ) {
                 unset( $raw[ $id ] );
                 $changed = true;
             }
@@ -166,12 +245,6 @@ class SFAF_Chat_Alerts {
         if ( $changed ) {
             update_option( self::OPTION, $raw, false );
         }
-    }
-
-    /** Plain text, one paragraph, capped. */
-    public static function clean_text( $text ) {
-        $text = trim( (string) preg_replace( '/\s+/u', ' ', wp_strip_all_tags( (string) $text ) ) );
-        return mb_substr( $text, 0, self::MAX_TEXT );
     }
 
     /**

@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.30.0
+Stable tag: 1.31.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,21 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.31.0 =
+* An alert with no last day now shows on its first day only, and ends at midnight
+  Pacific. With no first day, it starts the day it is saved. (Before, no last day meant
+  until deleted.)
+* Alerts saved before 1.31.0 with no last day keep showing until deleted, as before,
+  until an administrator presses "Apply the one-day rule to these" on Welcome & Alerts.
+  The screen first lists how many there are and what each would become. Nothing is
+  deleted, then or by the automatic cleanup.
+* The alerts list shows one Dates column in the brand's style: "December 31, 2026" for
+  one day, "December 21, 2026 to January 3, 2027" for a range.
+* Edit for each alert: the same form with every field filled in. Save changes updates
+  that alert in place; Cancel leaves it unchanged.
+* Alert text is saved exactly as typed, spaces and line breaks included. Text with HTML
+  tags is refused with a message, instead of having the tags removed.
 
 = 1.30.0 =
 * One control to minimize. The separate minimize button is gone: the X minimizes to the

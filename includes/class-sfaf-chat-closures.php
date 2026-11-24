@@ -129,7 +129,8 @@ class SFAF_Chat_Closures {
             $lines[] = 'NOTICES that staff have posted for right now. They are shown to the visitor when the chat opens. '
                 . 'Never contradict them, and mention one when it bears on the question:';
             foreach ( $alerts as $a ) {
-                $lines[] = '- ' . SFAF_Chat_Core::no_em_dash( (string) $a['text'] );
+                // One line each for the model; the stored text is never changed.
+                $lines[] = '- ' . SFAF_Chat_Core::no_em_dash( trim( (string) preg_replace( '/\s+/u', ' ', (string) $a['text'] ) ) );
             }
         }
 
