@@ -1545,7 +1545,9 @@ class SFAF_Chat_Endpoint {
      * domains only), the title exactly as entered, linked, its next day and time
      * (Today or Tomorrow in front when it is), its place, one line for its later
      * dates, and the program it belongs to as a line of text after the card. The
-     * button is the event's own page, labelled with its title. "subtitle" repeats
+     * button is the event's own page, labelled "Event details" (1.33.0; it was the
+     * title, which the linked title above already says). REVIEW:spanish "Detalles
+     * del evento". "subtitle" repeats
      * the day and place for a widget from before 1.32.0, cached for up to 5 minutes.
      */
     private static function event_card( array $r, $lang, $program ) {
@@ -1563,7 +1565,7 @@ class SFAF_Chat_Endpoint {
             'subtitle'  => SFAF_Chat_Core::no_em_dash( implode( ' · ', array_filter( array( $when, $where ) ) ) ) ?: null,
             'image_url' => SFAF_Chat_Core::is_sfaf_url( $image ) ? $image : null,
             'url'       => (string) $r['url'],
-            'cta'       => $title,
+            'cta'       => 'es' === $lang ? 'Detalles del evento' : 'Event details',
             'kind'      => 'es' === $lang ? 'Evento' : 'Event',
             'when'      => '' !== $when ? $when : null,
             'where'     => '' !== $where ? $where : null,

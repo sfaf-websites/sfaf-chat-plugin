@@ -186,13 +186,21 @@
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-q{fill:none;stroke:var(--sfaf-dark);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;}',
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-d{fill:var(--sfaf-dark);stroke:none;}',
     // BUBBLE:START variant C, "Tilted": rests at a slight tilt with a light glint, waves once.
-    '#sfaf-chat .sfaf-launcher .sfaf-qmark{filter:drop-shadow(0 1px 1px rgba(0,0,0,.28)) drop-shadow(0 4px 7px rgba(0,0,0,.22));',
+    '#sfaf-chat .sfaf-qmark{filter:drop-shadow(0 1px 1px rgba(0,0,0,.28)) drop-shadow(0 4px 7px rgba(0,0,0,.22));',
     '  transform-origin:30% 90%;transform:rotate(-8deg);animation:sfaf-q-wave .9s var(--sfaf-ease) .7s 1 both;}',
     '#sfaf-chat .sfaf-launcher:hover .sfaf-qmark,#sfaf-chat .sfaf-launcher:focus-visible .sfaf-qmark{transform:rotate(-8deg) translateY(-2px);}',
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-b{stroke-width:1.75;}',
     '#sfaf-chat .sfaf-qmark .sfaf-qmark-g{fill:none;stroke:#fff;stroke-opacity:.75;stroke-width:1.6;stroke-linecap:round;}',
     '@keyframes sfaf-q-wave{0%,100%{transform:rotate(-8deg);}25%{transform:rotate(7deg) translateY(-3px);}50%{transform:rotate(-14deg);}72%{transform:rotate(-4deg);}}',
     // BUBBLE:END
+    // The same bubble in the header (1.33.0), left of the title. Decorative: aria-hidden,
+    // not a button, no focus stop. Its motion is the launcher's, played each time the
+    // chat opens: closed it has none, so opening starts it again. Moving between
+    // centered and docked keeps the chat open, so it doesn't replay; a docked chat put
+    // back on a new page doesn't wave either (sfaf-qmark-still).
+    '#sfaf-chat .sfaf-header .sfaf-qmark{flex:none;width:30px;height:30px;overflow:visible;margin:0 4px 0 -2px;pointer-events:none;}',
+    '#sfaf-chat:not(.sfaf-open) .sfaf-header .sfaf-qmark,#sfaf-chat .sfaf-header .sfaf-qmark.sfaf-qmark-still{animation:none;}',
+    '#sfaf-chat.sfaf-docked .sfaf-header .sfaf-qmark{width:26px;height:26px;margin-right:2px;}',
     '#sfaf-chat.sfaf-open .sfaf-launcher{display:none;}',
 
     // Overlay
@@ -509,6 +517,7 @@
     '  #sfaf-chat .sfaf-foot{padding:0 12px 10px;}',
     // No corner to dock to on a phone: full screen whatever the state, no dock control.
     '  #sfaf-chat .sfaf-header .sfaf-dock{display:none;}',
+    '  #sfaf-chat .sfaf-header .sfaf-qmark,#sfaf-chat.sfaf-docked .sfaf-header .sfaf-qmark{width:26px;height:26px;margin:0 2px 0 -2px;}',
     '  #sfaf-chat.sfaf-docked .sfaf-panel{inset:0;right:auto;bottom:auto;width:100%;height:100%;height:100dvh;}',
     '}',
 
@@ -582,7 +591,9 @@
     ['sfaf-qmark-d', 'M16 17.15a1.45 1.45 0 1 1 0 2.9a1.45 1.45 0 1 1 0-2.9z']
   ];
   // BUBBLE:END
-  function questionBubble() {
+  // once: the launcher's, whose motion is over for good when it ends. The header's
+  // (1.33.0) plays each time the chat opens, so it keeps its animation.
+  function questionBubble(once) {
     var ns = 'http://www.w3.org/2000/svg';
     var s = document.createElementNS(ns, 'svg');
     s.setAttribute('viewBox', '0 0 32 32');
@@ -597,9 +608,11 @@
     });
     // Once: when the load motion ends it is gone for good, even if the launcher is
     // hidden and shown again (which would otherwise start it over).
-    s.addEventListener('animationend', function () {
-      s.classList.add('sfaf-qmark-done');
-    });
+    if (once) {
+      s.addEventListener('animationend', function () {
+        s.classList.add('sfaf-qmark-done');
+      });
+    }
     return s;
   }
 
@@ -652,7 +665,7 @@
   launcher.type = 'button';
   launcher.setAttribute('aria-haspopup', 'dialog');
   launcher.setAttribute('aria-expanded', 'false');
-  launcher.appendChild(questionBubble());
+  launcher.appendChild(questionBubble(true));
   launcher.appendChild(el('span', null, 'Ask SFAF'));
 
   var overlay = el('div', 'sfaf-overlay');
@@ -669,6 +682,9 @@
   var closeBtn = el('button', 'sfaf-close');
   closeBtn.type = 'button';
   closeBtn.appendChild(svg(ICON_CLOSE));
+  var headMark = questionBubble(false);
+  headMark.classList.add('sfaf-headmark');
+  header.appendChild(headMark);
   header.appendChild(title);
 
   // No voice of either kind, no control: there is nothing to offer.
@@ -1154,7 +1170,7 @@
       body.appendChild(k === 'when' ? whenLine('sfaf-ev-when', card[k]) : el('div', 'sfaf-ev-' + k, card[k]));
     });
     var cta = el('a', 'sfaf-card-cta');
-    var label = card.cta || card.title || 'Event details';
+    var label = card.cta || 'Event details';
     markFlow(cta, label);
     cta.href = url;
     cta.setAttribute('data-sfaf-kind', 'event');
@@ -2079,6 +2095,7 @@
   function setState(next) {
     uiState = next;
     var shown = next !== 'minimized';
+    if (!shown) headMark.classList.remove('sfaf-qmark-still');
     root.classList.toggle('sfaf-open', shown);
     // Minimized keeps the docked class, so a docked window fades out where it is.
     if (next === 'centered') root.classList.remove('sfaf-docked');
@@ -2218,6 +2235,7 @@
     var ui = stored(STORE_UI) || {};
     lastOpen = ui.last === 'docked' ? 'docked' : 'centered';
     if (ui.state === 'docked' && !narrow()) {
+      headMark.classList.add('sfaf-qmark-still');
       setState('docked');
       checkOnDevice();
       loadStarters();

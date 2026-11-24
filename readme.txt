@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.32.0
+Stable tag: 1.33.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,21 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.33.0 =
+* The launcher's question bubble also sits in the chat header, left of "Ask SFAF". Same
+  look and the same wave, played each time the chat opens (not when a docked chat comes
+  back on a new page, and never with reduced motion). Decorative only: hidden from
+  screen readers, not a control, no focus stop. 30px, 26px when docked and on phones.
+* Complaints are acknowledged first. When a visitor describes a bad experience or a
+  complaint about SFAF, Strut or a program, the reply opens with one short sentence such
+  as "We're sorry to hear you had a bad experience.", then the usual information, then a
+  warm invitation to tell us what happened (the phone number and, when the contact form
+  is set up, its button). Never an admission of fault, blame, guesses, promises or
+  timelines; sensitive details are not repeated back; crisis replies are unchanged;
+  neutral questions get no apology. Same in Spanish (wording awaiting review).
+* The single-event card's yellow button reads "Event details" ("Detalles del evento" in
+  Spanish, awaiting review) instead of repeating the event title. Same link.
 
 = 1.32.0 =
 * Events are shown by the chat, not written by the model. The model names the events
