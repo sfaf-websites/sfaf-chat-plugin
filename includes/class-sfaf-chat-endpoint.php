@@ -776,20 +776,22 @@ class SFAF_Chat_Endpoint {
                     'title' => (string) ( $program['title'] ?? '' ),
                 ) ) ), $enc );
         }
+        // After a list of events (1.30.0): a related page, when one was found, else the calendar.
         $list_link = null !== $program
             ? 'link the program page (id "' . $program['id'] . '")'
-            : $calendar_hint;
+            : 'if a page in RELATED PAGES is clearly about the same event or occasion, mention it in a sentence and link it; otherwise ' . $calendar_hint;
 
         if ( array() !== $events ) {
             $system_instruction .= "\n\n## UPCOMING EVENTS (live)\n"
                 . "Read from the SFAF events calendar just now and ALREADY filtered server-side: published, "
-                . "not cancelled, not private, not yet over, soonest first. Treat every event listed here as "
+                . "not cancelled, not private, not yet over. Treat every event listed here as "
                 . "upcoming. Do not compare dates, do not filter, do not decide whether something has passed "
                 . "or which is next: the list is already in order, and \"date\" is exactly as the calendar "
                 . "gives it. {$events_note}\n"
                 . "If none of these is clearly what the visitor asked about, do not offer one as if it were; "
-                . "{$calendar_hint} instead. When several are listed, list them all as a bulleted list, one "
-                . "line each (title and date), in the order given, and {$list_link}. When only one is listed, link "
+                . "{$calendar_hint} instead. When several are listed, list every one that fits what was asked, "
+                . "not a pick of one, as a bulleted list, one line each (title, date and time, location), in "
+                . "the order given; after the list, {$list_link}. When only one is listed, link "
                 . "it by its id" . ( null !== $program ? ', or the program page' : '' ) . ".\n"
                 . json_encode( array_map( $for_model, $events ), $enc );
         }

@@ -24,9 +24,11 @@
  * "Today"/"Tomorrow" label. The model receives a finished list and is told not to
  * compare dates.
  *
- * MATCHING, THEN A SHORT LIST. Keywords first: calendar labels, then titles and
- * descriptions, with the question's synonyms counted too (SFAF_Chat_Core::SYNONYMS,
- * so "Spanish" meets "Programa Latino"). When a message is about events, names a
+ * MATCHING, THEN A SHORT LIST. Keywords first, on stems with the question's synonyms
+ * (SFAF_Chat_Core::terms() and SYNONYMS, as pages are ranked, so "Spanish" meets
+ * "Programa Latino"), across each event's title, calendar labels, location and
+ * description (1.30.0). Every event that matches is kept: title and label matches
+ * first, then the rest, soonest first in each. When a message is about events, names a
  * topic, and still nothing matches, the model gets a short, separate list of the
  * next upcoming events in the window (titles and calendar labels only) as
  * CANDIDATES, and decides itself whether one is clearly what was asked. Keyword
@@ -43,7 +45,11 @@ class SFAF_Chat_Events {
     const CALENDAR_ID = 'events-calendar';
 
     const MAX_SCAN     = 300;   // upcoming occurrences considered per question, soonest first
-    const MAX_SENT     = 6;     // matched events handed to the model
+    // Matched events handed to the model, one per series (1.30.0, was 6). Ten full
+    // records is about the size of RELATED PAGES, and more than a phone-sized list a
+    // visitor will read; past it the model is told how many there are and points to
+    // the calendar.
+    const MAX_SENT     = 10;
     const GENERAL_SENT = 5;     // "what's coming up?" with no topic
     const ALSO_ON      = 3;     // later dates of a series, listed on its next one
     const DESC_WORDS   = 120;
@@ -114,9 +120,11 @@ class SFAF_Chat_Events {
         $match = self::match( $all, $tokens );
 
         // A follow-up ("what time does it start?") names nothing; the subject is
-        // earlier in the thread. Only when this message is about events, or says
-        // almost nothing else, so an unrelated new question stays unrelated.
-        if ( array() === $match['events'] && ( $eventish || count( self::content_tokens( $tokens ) ) <= 2 ) ) {
+        // earlier in the thread. Only when this message is about events, or names no
+        // subject of its own (1.30.0; was "two words or fewer"), so an unrelated new
+        // question stays unrelated: with stems, "How do I donate?" after "Where can I
+        // get tested?" would otherwise pull in the calendar's testing events.
+        if ( array() === $match['events'] && ( $eventish || array() === self::meaningful( $tokens ) ) ) {
             $prior = array();
             foreach ( array_slice( $user_turns, -2 ) as $t ) {
                 $prior = array_merge( $prior, SFAF_Chat_Core::tokenize( $t ) );
@@ -151,35 +159,24 @@ class SFAF_Chat_Events {
         $picked = $match['events'];
 
         /*
-         * A topic matched and no window was named: show what is coming up this week
-         * and next week, every date, soonest first. Not one series' next date, which
-         * may be weeks out while the same program meets twice this week. If the
-         * program has nothing in those two weeks, fall back to the next dates.
+         * A topic matched and no window was named (1.30.0): every matching upcoming
+         * event, one record per series at its next date with the dates after it, up to
+         * MAX_SENT. Before 1.30.0 this listed every date of the next two weeks, which
+         * spent the list on one weekly series and left other matches out.
          */
         if ( ! $general && null === $window ) {
-            $two   = self::two_weeks();
-            $soon  = array_values( array_filter( $picked, function ( $e ) use ( $two ) {
-                return $e['date'] >= $two['from'] && $e['date'] <= $two['to'];
-            } ) );
-            $organizers = self::organizers( array() !== $soon ? $soon : $picked, $match );
-            if ( array() !== $soon ) {
-                return array(
-                    'events'     => self::to_occurrences( $soon, self::WINDOW_SENT ),
-                    'candidates' => array(),
-                    'calendar'   => self::calendar_record(),
-                    'note'       => 'Matched to the question by ' . $match['why'] . '. These are ALL the matching events '
-                        . $two['label'] . ', every date, soonest first' . ( count( $soon ) > self::WINDOW_SENT ? ' (the first ' . self::WINDOW_SENT . ')' : '' )
-                        . '. List them in this order.',
-                    'organizers' => $organizers,
-                );
-            }
+            $records = self::to_records( $picked, self::MAX_SENT, $all );
+            $total   = self::distinct( $picked );
             return array(
-                'events'     => self::to_records( $picked, self::MAX_SENT, $all ),
+                'events'     => $records,
                 'candidates' => array(),
                 'calendar'   => self::calendar_record(),
-                'note'       => 'Matched to the question by ' . $match['why'] . '. None of these is ' . $two['label']
-                    . '; these are the next dates, soonest first.',
-                'organizers' => $organizers,
+                'note'       => 'Matched to the question by ' . $match['why'] . '. '
+                    . ( $total > count( $records )
+                        ? 'There are ' . $total . ' matching upcoming events and only the first ' . count( $records ) . ' are listed: list these, then say there are more and point to the events calendar for the rest. '
+                        : 'These are ALL the matching upcoming events. ' )
+                    . 'A repeating event is listed once, at its next date, with the dates after it. ' . self::ORDER_NOTE,
+                'organizers' => self::organizers( $picked, $match ),
             );
         }
 
@@ -209,7 +206,10 @@ class SFAF_Chat_Events {
 
         $note = $general
             ? 'Not matched to a topic: these are simply the next events on the calendar.'
-            : 'Matched to the question by ' . $match['why'] . '.';
+            : 'Matched to the question by ' . $match['why'] . '. ' . self::ORDER_NOTE
+                . ( count( $picked ) > self::WINDOW_SENT
+                    ? ' There are ' . count( $picked ) . ' matching dates and only the first ' . self::WINDOW_SENT . ' are listed: list these, then say there are more and point to the events calendar for the rest.'
+                    : '' );
 
         return array(
             'events'     => $records,
@@ -220,15 +220,27 @@ class SFAF_Chat_Events {
         );
     }
 
-    /** Today through the Sunday after next, in the site timezone. */
-    private static function two_weeks() {
-        $now    = new DateTimeImmutable( 'now', wp_timezone() );
-        $sunday = 7 === (int) $now->format( 'N' ) ? $now : $now->modify( 'next sunday' );
-        return array(
-            'from'  => $now->format( 'Y-m-d' ),
-            'to'    => $sunday->modify( '+7 days' )->format( 'Y-m-d' ),
-            'label' => 'this week and next week',
-        );
+    // How a matched list is ordered, for the model (1.30.0).
+    const ORDER_NOTE = 'Order: events whose title or calendar label matched come first, then events that only mention it in their description or location; within each, the closest matches first, then the soonest. List every one, in this order.';
+
+    /**
+     * Which dates are one repeating event: the same series AND the same title
+     * (1.30.0), or '' for an event on its own. The series alone is not enough: the
+     * live calendar files different events under one series ("World AIDS Day" holds
+     * the breakfast, the vigil and the performance), and those are separate events.
+     */
+    private static function repeat_key( array $e ) {
+        return $e['series'] ? $e['series'] . '|' . mb_strtolower( trim( (string) $e['title'] ) ) : '';
+    }
+
+    /** How many different events: a repeating event counts once. */
+    private static function distinct( array $events ) {
+        $keys = array();
+        foreach ( $events as $e ) {
+            $k = self::repeat_key( $e );
+            $keys[ '' !== $k ? 's' . $k : 'e' . $e['id'] ] = true;
+        }
+        return count( $keys );
     }
 
     /**
@@ -257,12 +269,13 @@ class SFAF_Chat_Events {
         $seen = array();
         $out  = array();
         foreach ( $events as $e ) {
-            $repeat = $e['series'] && isset( $seen[ $e['series'] ] );
+            $key    = self::repeat_key( $e );
+            $repeat = '' !== $key && isset( $seen[ $key ] );
             $rec    = self::record( $e, array(), $repeat );
             if ( null !== $rec ) {
                 $out[] = $rec;
-                if ( $e['series'] ) {
-                    $seen[ $e['series'] ] = true;
+                if ( '' !== $key ) {
+                    $seen[ $key ] = true;
                 }
             }
             if ( count( $out ) >= $limit ) {
@@ -394,6 +407,7 @@ class SFAF_Chat_Events {
                 'start'  => (string) get_post_meta( $id, '_uc_start_time', true ),
                 'title'  => self::plain( get_the_title( $id ) ),
                 'text'   => self::description( $id ),
+                'where'  => self::location( $id ),   // matched too (1.30.0)
                 'series' => $series,
                 'terms'  => $terms,
             );
@@ -425,34 +439,52 @@ class SFAF_Chat_Events {
     /* ============================== MATCHING ============================== */
 
     /**
-     * Which upcoming events the tokens are about.
+     * Which upcoming events the tokens are about (1.30.0).
      *
-     * 1. A term of any event taxonomy (organizer, series, category, venue, tags,
-     *    whatever exists). A term matches when every meaningful word of its name is
-     *    in the question, or when the question has a word that belongs to that term
-     *    alone among all live terms ("aging" for Aging Services). The term list is
-     *    built from the events themselves, so a term with nothing upcoming is never
-     *    offered.
-     * 2. Otherwise the event title, then the description, by word overlap, with a
-     *    floor so one incidental word doesn't count as a match.
+     * Every question word that could identify something (not an event, time or
+     * generic word) is a group: its stem, and the stems of its synonyms. An event is
+     * looked at in four places, each on stems (SFAF_Chat_Core::terms()): its title,
+     * its calendar labels (every taxonomy), its location and its description.
      *
-     * @return array{events:array,why:string}
+     * An event matches when
+     *   - one of its calendar labels matches: every meaningful word of the label is in
+     *     the question, or the question has a word that belongs to that label alone
+     *     among all live labels ("aging" for Aging Services). The labels come from
+     *     the events themselves, so one with nothing upcoming is never offered; or
+     *   - the four places together hold enough of the question: two of its groups, or
+     *     its only one. So one incidental word in a long question is not a match.
+     *
+     * Every match is kept. A title or label match comes first, then the events that
+     * only mention it in the description or location; within each, the events that
+     * hold more of the question's words first, then the soonest.
+     * Before 1.30.0 a label match returned label matches only, and the rest kept only
+     * the top band of scores, so an event that said "World AIDS Day" in its
+     * description was dropped when another said it in its title.
+     *
+     * @return array{events:array,why:string,hit_names:array}
      */
     private static function match( array $all, array $tokens ) {
-        // Generic words ("health", "support") never count toward a match, in a
-        // term, a title or a description.
-        $content = array_flip( self::meaningful( $tokens ) );
-        if ( array() === $content ) {
-            return array( 'events' => array(), 'why' => '' );
-        }
-        // The question's synonyms count as its own words ("Spanish" meets "Latino").
-        foreach ( SFAF_Chat_Core::synonyms_of( array_keys( $content ) ) as $syns ) {
-            foreach ( self::meaningful( $syns ) as $syn ) {
-                $content[ $syn ] = true;
-            }
+        $none  = array( 'events' => array(), 'why' => '', 'hit_names' => array() );
+        $words = array_values( array_unique( self::meaningful( $tokens ) ) );
+        if ( array() === $words ) {
+            return $none;
         }
 
-        /* ---- 1. taxonomy terms ---- */
+        // One group per word: its stem and its synonyms' stems.
+        $syns    = SFAF_Chat_Core::synonyms_of( $words );
+        $groups  = array();
+        $content = array();   // every stem of every group
+        foreach ( $words as $w ) {
+            $g = array( SFAF_Chat_Core::stem( $w ) => true );
+            foreach ( self::meaningful( $syns[ $w ] ?? array() ) as $s ) {
+                $g[ SFAF_Chat_Core::stem( $s ) ] = true;
+            }
+            $groups[] = $g;
+            $content += $g;
+        }
+        $need = min( 2, count( $groups ) );
+
+        /* ---- calendar labels ---- */
         $names = array();   // "tax|term_id" => name
         foreach ( $all as $e ) {
             foreach ( $e['terms'] as $tax => $list ) {
@@ -461,100 +493,100 @@ class SFAF_Chat_Events {
                 }
             }
         }
-
-        $term_tokens = array();
-        $df          = array();   // word => how many distinct term names use it
+        $label_stems = function ( $name ) {
+            return array_values( array_unique( array_map( array( 'SFAF_Chat_Core', 'stem' ), self::meaningful( SFAF_Chat_Core::tokenize( $name ) ) ) ) );
+        };
+        $df = array();   // stem => how many distinct label names use it
         foreach ( array_unique( $names ) as $name ) {
-            foreach ( array_unique( self::meaningful( SFAF_Chat_Core::tokenize( $name ) ) ) as $w ) {
+            foreach ( $label_stems( $name ) as $w ) {
                 $df[ $w ] = ( $df[ $w ] ?? 0 ) + 1;
             }
         }
-        foreach ( $names as $key => $name ) {
-            $term_tokens[ $key ] = array_values( array_unique( self::meaningful( SFAF_Chat_Core::tokenize( $name ) ) ) );
-        }
-
         $hit_terms = array();
-        foreach ( $term_tokens as $key => $words ) {
-            if ( array() === $words ) {
+        foreach ( $names as $key => $name ) {
+            $stems = $label_stems( $name );
+            if ( array() === $stems ) {
                 continue;
             }
-            $all_in      = array() === array_diff( $words, array_keys( $content ) );
+            $all_in      = array() === array_diff( $stems, array_keys( $content ) );
             $distinctive = false;
-            foreach ( $words as $w ) {
+            foreach ( $stems as $w ) {
                 if ( isset( $content[ $w ] ) && 1 === ( $df[ $w ] ?? 0 ) && mb_strlen( $w ) >= 4 ) {
                     $distinctive = true;
                     break;
                 }
             }
             if ( $all_in || $distinctive ) {
-                $hit_terms[ $key ] = $all_in ? 2 : 1;
+                $hit_terms[ $key ] = true;
             }
         }
 
-        if ( array() !== $hit_terms ) {
-            $scored = array();
-            foreach ( $all as $i => $e ) {
-                $s = 0;
-                foreach ( $e['terms'] as $tax => $list ) {
-                    foreach ( array_keys( $list ) as $tid ) {
-                        $s += $hit_terms[ $tax . '|' . $tid ] ?? 0;
+        /* ---- each event ---- */
+        $hits = array();   // [tier, words covered, position, event]
+        $by   = array();   // which places matched, for the note
+        foreach ( $all as $pos => $e ) {
+            $label_hit = false;
+            $label_txt = array();
+            foreach ( $e['terms'] as $tax => $list ) {
+                foreach ( $list as $tid => $name ) {
+                    $label_txt[] = $name;
+                    if ( isset( $hit_terms[ $tax . '|' . $tid ] ) ) {
+                        $label_hit = true;
                     }
                 }
-                if ( $s > 0 ) {
-                    $scored[] = array( $s, $i );
-                }
             }
-            $why = array();
-            foreach ( array_keys( $hit_terms ) as $key ) {
-                $why[] = '"' . $names[ $key ] . '"';
-            }
-            return array(
-                'events'    => self::best( $all, $scored ),
-                'why'       => 'calendar label ' . implode( ', ', array_unique( $why ) ),
-                'hit_names' => array_values( array_unique( array_intersect_key( $names, $hit_terms ) ) ),
+            $places = array(
+                'event title'    => array_flip( SFAF_Chat_Core::terms( $e['title'] ) ),
+                'calendar label' => array_flip( SFAF_Chat_Core::terms( implode( ' ', $label_txt ) ) ),
+                'location'       => array_flip( SFAF_Chat_Core::terms( (string) ( $e['where'] ?? '' ) ) ),
+                'description'    => array_flip( SFAF_Chat_Core::terms( $e['text'] ) ),
             );
-        }
-
-        /* ---- 2. title, then description ---- */
-        $scored = array();
-        foreach ( $all as $i => $e ) {
-            $title = array_flip( SFAF_Chat_Core::tokenize( $e['title'] ) );
-            $desc  = array_flip( SFAF_Chat_Core::tokenize( $e['text'] ) );
-            $t_hit = 0;
-            $d_hit = 0;
-            foreach ( array_keys( $content ) as $w ) {
-                if ( isset( $title[ $w ] ) ) {
-                    $t_hit++;
-                } elseif ( isset( $desc[ $w ] ) ) {
-                    $d_hit++;
+            $covered  = 0;
+            $in_title = false;
+            $where    = array();
+            foreach ( $groups as $g ) {
+                foreach ( $places as $place => $stems ) {
+                    if ( array() !== array_intersect_key( $g, $stems ) ) {
+                        $covered++;
+                        $where[ $place ] = true;
+                        $in_title        = $in_title || 'event title' === $place;
+                        break;
+                    }
                 }
             }
-            // A title word, or two description words: anything less is a guess.
-            if ( $t_hit >= 1 || $d_hit >= 2 ) {
-                $scored[] = array( $t_hit * 3 + $d_hit, $i );
+            if ( ! $label_hit && $covered < $need ) {
+                continue;
             }
+            // Tier 0: the title or a calendar label matched. Tier 1: only the
+            // description or the location.
+            $hits[] = array( ( $label_hit || $in_title ) ? 0 : 1, $covered, $pos, $e );
+            $by    += $where;
         }
-        return array( 'events' => self::best( $all, $scored ), 'why' => 'event title or description' );
-    }
+        if ( array() === $hits ) {
+            return $none;
+        }
+        // Within a tier, the events holding more of the question first, then soonest
+        // ($all is soonest first, so its position is the date order).
+        usort( $hits, function ( $a, $b ) {
+            return array( $a[0], -$a[1], $a[2] ) <=> array( $b[0], -$b[1], $b[2] );
+        } );
 
-    /** The best-scoring events, kept in date order. Only the top score band survives. */
-    private static function best( array $all, array $scored ) {
-        if ( array() === $scored ) {
-            return array();
+        $hit_names = array_values( array_unique( array_intersect_key( $names, $hit_terms ) ) );
+        $why       = array();
+        if ( array() !== $hit_names ) {
+            $why[] = 'calendar label "' . implode( '", "', $hit_names ) . '"';
+            unset( $by['calendar label'] );
         }
-        $top  = max( array_column( $scored, 0 ) );
-        $keep = array();
-        foreach ( $scored as $pair ) {
-            if ( $pair[0] >= $top * 0.6 ) {
-                $keep[ $pair[1] ] = true;
+        foreach ( array( 'event title', 'calendar label', 'location', 'description' ) as $place ) {
+            if ( isset( $by[ $place ] ) ) {
+                $why[] = $place;
             }
         }
-        ksort( $keep );   // $all is already soonest first
-        $out = array();
-        foreach ( array_keys( $keep ) as $i ) {
-            $out[] = $all[ $i ];
-        }
-        return $out;
+        return array(
+            'events'    => array_column( $hits, 3 ),
+            'why'       => implode( ', ', $why ),
+            'hit_names' => $hit_names,
+        );
     }
 
     private static function is_eventish( array $tokens ) {
@@ -632,21 +664,22 @@ class SFAF_Chat_Events {
         // Later dates of every series, from the full upcoming list.
         $dates_by_series = array();
         foreach ( $all as $e ) {
-            if ( $e['series'] ) {
-                $dates_by_series[ $e['series'] ][] = $e;
+            if ( '' !== self::repeat_key( $e ) ) {
+                $dates_by_series[ self::repeat_key( $e ) ][] = $e;
             }
         }
 
         $seen = array();
         $out  = array();
         foreach ( $events as $e ) {
-            if ( $e['series'] ) {
-                if ( isset( $seen[ $e['series'] ] ) ) {
+            $key = self::repeat_key( $e );
+            if ( '' !== $key ) {
+                if ( isset( $seen[ $key ] ) ) {
                     continue;
                 }
-                $seen[ $e['series'] ] = true;
+                $seen[ $key ] = true;
             }
-            $rec = self::record( $e, $dates_by_series[ $e['series'] ] ?? array(), $labels_only );
+            $rec = self::record( $e, '' !== $key ? ( $dates_by_series[ $key ] ?? array() ) : array(), $labels_only );
             if ( null !== $rec ) {
                 $out[] = $rec;
             }

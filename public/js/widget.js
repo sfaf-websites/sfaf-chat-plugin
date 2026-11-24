@@ -222,12 +222,13 @@
     '#sfaf-chat .sfaf-header button:focus-visible{outline-color:var(--sfaf-focus-on-dark);outline-offset:0;}',
     '#sfaf-chat .sfaf-header svg{width:18px;height:18px;flex:none;}',
     '#sfaf-chat .sfaf-header .sfaf-close{width:36px;justify-content:center;}',
-    // 1.29.0: minimize, dock and maximize, square like close. Centered shows minimize,
-    // dock and close; docked shows minimize and maximize.
-    '#sfaf-chat .sfaf-header .sfaf-min,#sfaf-chat .sfaf-header .sfaf-dock,#sfaf-chat .sfaf-header .sfaf-max{width:36px;justify-content:center;}',
+    // Dock and maximize, square like the X (1.29.0). The X minimizes, so there is no
+    // separate minimize control (1.30.0). Centered: Read aloud, dock, X. Docked: Read
+    // aloud (icon only), maximize, X.
+    '#sfaf-chat .sfaf-header .sfaf-dock,#sfaf-chat .sfaf-header .sfaf-max{width:36px;justify-content:center;}',
     '#sfaf-chat .sfaf-header .sfaf-max{display:none;}',
     '#sfaf-chat.sfaf-docked .sfaf-header .sfaf-max{display:inline-flex;}',
-    '#sfaf-chat.sfaf-docked .sfaf-header .sfaf-dock,#sfaf-chat.sfaf-docked .sfaf-header .sfaf-close{display:none;}',
+    '#sfaf-chat.sfaf-docked .sfaf-header .sfaf-dock{display:none;}',
 
     // Docked (1.29.0): a smaller window in the corner, above the launcher row, with no
     // dimming, so the page behind can be read and used.
@@ -540,7 +541,6 @@
 
   // Square-cornered line icons, to match the squared interface.
   var ICON_CLOSE = ['M18 6 6 18', 'M6 6l12 12'];
-  var ICON_MINIMIZE = ['M5 18h14'];
   var ICON_DOCK = ['M3 4h18v16H3z', 'M12 12h6v5h-6z'];
   var ICON_MAXIMIZE = ['M4 4h16v16H4z', 'M4 9h16'];
   var ICON_SEND = ['M4 12h15', 'M13 6l6 6-6 6'];
@@ -646,7 +646,6 @@
   title.id = 'sfaf-chat-title';
   var closeBtn = el('button', 'sfaf-close');
   closeBtn.type = 'button';
-  closeBtn.setAttribute('aria-label', 'Close chat');
   closeBtn.appendChild(svg(ICON_CLOSE));
   header.appendChild(title);
 
@@ -661,8 +660,8 @@
     readBtn.appendChild(el('span', null, 'Read aloud'));
     header.appendChild(readBtn);
   }
-  // 1.29.0: minimize and dock (centered), minimize and maximize (docked). CSS shows the
-  // right ones for the state; the close button minimizes too.
+  // Dock (centered) and maximize (docked); CSS shows the one for the state. The X is
+  // the only minimize control (1.30.0): it hides the chat and keeps the conversation.
   function headerBtn(cls, labelText, icon) {
     var b = el('button', cls);
     b.type = 'button';
@@ -672,10 +671,11 @@
     header.appendChild(b);
     return b;
   }
-  var minBtn = headerBtn('sfaf-min', 'Minimize chat', ICON_MINIMIZE);
   var dockBtn = headerBtn('sfaf-dock', 'Dock chat to the corner', ICON_DOCK);
   var maxBtn = headerBtn('sfaf-max', 'Bring chat back to the center', ICON_MAXIMIZE);
-  closeBtn.setAttribute('aria-label', 'Close chat (your conversation is kept)');
+  // Named for what it does: the chat goes back to the launcher, nothing is wiped.
+  closeBtn.setAttribute('aria-label', 'Minimize chat');
+  closeBtn.title = 'Minimize chat';
   header.appendChild(closeBtn);
 
   var messages = el('div', 'sfaf-messages');
@@ -2019,7 +2019,6 @@
 
   launcher.addEventListener('click', open);
   closeBtn.addEventListener('click', minimize);
-  minBtn.addEventListener('click', minimize);
   dockBtn.addEventListener('click', dock);
   maxBtn.addEventListener('click', maximize);
 

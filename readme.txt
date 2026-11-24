@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.29.0
+Stable tag: 1.30.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,27 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.30.0 =
+* One control to minimize. The separate minimize button is gone: the X minimizes to the
+  launcher, as it already did, and keeps the conversation. Screen readers now call it
+  "Minimize chat". Centered: Read aloud, dock, X. Docked: Read aloud, maximize, X. Esc
+  still minimizes; Clear chat is still the only way to wipe. Phones are unchanged.
+* Fuller event matching. A question about events now finds every matching upcoming
+  event, not just the best few: each event's title, calendar labels, location and
+  description are all matched, with the same word stems and synonyms used for pages.
+  Events that only mention the subject in their description are kept, listed after
+  the title and label matches. Example, "What's happening for World AIDS Day?" on the
+  live calendar: 3 events before, 5 now (the CTZ bike ride and A Seat at the Red Table
+  were missing).
+* A repeating event is one entry at its next date, with the three dates after it. A
+  repeating event is the same series and the same title, because the calendar puts
+  different events in one series (World AIDS Day holds several).
+* Up to 10 events go to the assistant (was 6). With more, it is told how many there are,
+  and says there are more and points to the events calendar.
+* The assistant lists every event that fits the question, with its date, time and
+  location, then mentions a related page if one was found. Event dates still come only
+  from the calendar, never from a page.
 
 = 1.29.0 =
 * The chat keeps the conversation while a visitor browses the site. Three states:
