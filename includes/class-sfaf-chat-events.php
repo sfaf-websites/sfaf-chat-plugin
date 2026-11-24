@@ -99,6 +99,8 @@ class SFAF_Chat_Events {
      *   note      one line for the model saying how the list was chosen
      *   organizers  organizer names of the matched events, most relevant first, so
      *               the endpoint can find the program's own page
+     *   topics      the calendar labels the question matched ("World AIDS Day"), so
+     *               the endpoint can find a page about the topic as a whole (1.32.0)
      */
     public static function for_question( $question, array $user_turns = array() ) {
         $none = array( 'events' => array(), 'candidates' => array(), 'calendar' => null, 'note' => '', 'organizers' => array() );
@@ -177,6 +179,7 @@ class SFAF_Chat_Events {
                         : 'These are ALL the matching upcoming events. ' )
                     . 'A repeating event is listed once, at its next date, with the dates after it. ' . self::ORDER_NOTE,
                 'organizers' => self::organizers( $picked, $match ),
+                'topics'     => (array) ( $match['hit_names'] ?? array() ),
             );
         }
 
@@ -217,6 +220,7 @@ class SFAF_Chat_Events {
             'calendar'   => self::calendar_record(),
             'note'       => $note . $window_note,
             'organizers' => $general ? array() : self::organizers( $picked, $match ),
+            'topics'     => $general ? array() : (array) ( $match['hit_names'] ?? array() ),
         );
     }
 
@@ -738,10 +742,12 @@ class SFAF_Chat_Events {
             $facts[] = 'Registration: through the event page.';
         }
 
-        $later = array();
+        $later       = array();
+        $later_sched = array();
         foreach ( $series_dates as $s ) {
             if ( $s['id'] !== $id && array( $s['date'], $s['start'] ) > array( $e['date'], $e['start'] ) ) {
-                $later[] = self::when( $s['id'], false );
+                $later[]       = self::when( $s['id'], false );
+                $later_sched[] = self::sched( $s['id'] );
                 if ( count( $later ) >= self::ALSO_ON ) {
                     break;
                 }
@@ -775,7 +781,170 @@ class SFAF_Chat_Events {
                 'description' => $desc,
                 'image'       => '' !== $image ? $image : null,
             ),
+            // For the list and the card the widget shows (1.32.0), formatted after the
+            // model has answered, in its language. Never sent to the model.
+            'sched'          => self::sched( $id ),
+            'later_sched'    => $later_sched,
+            'organizers'     => array_values( (array) ( $e['terms']['uc_organizer'] ?? array() ) ),
         );
+    }
+
+    /* ======================= WHAT THE VISITOR SEES (1.32.0) ================== */
+
+    /** The raw schedule of one occurrence: date, last day, start, end. */
+    private static function sched( $id ) {
+        return array(
+            'date'  => (string) get_post_meta( $id, '_uc_event_date', true ),
+            'last'  => (string) get_post_meta( $id, '_uc_end_date', true ),
+            'start' => (string) get_post_meta( $id, '_uc_start_time', true ),
+            'end'   => (string) get_post_meta( $id, '_uc_end_time', true ),
+        );
+    }
+
+    const ES_MONTHS = array( 1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre' );
+    const ES_DAYS   = array( 'domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado' );
+
+    /**
+     * A day as the brand guide writes an upcoming one: "Tuesday, December 1", no
+     * year, no ordinal. Spanish: "martes, 1 de diciembre". $with_day false drops
+     * the weekday ("December 1", "1 de diciembre").
+     */
+    public static function day_label( $ymd, $lang = 'en', $with_day = true ) {
+        if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $ymd ) ) {
+            return (string) $ymd;
+        }
+        // The date is a calendar day, not a moment: read at noon UTC, formatted in UTC.
+        $utc = new DateTimeZone( 'UTC' );
+        $ts  = ( new DateTimeImmutable( $ymd . ' 12:00:00', $utc ) )->getTimestamp();
+        if ( 'es' === $lang ) {
+            $day = self::ES_DAYS[ (int) wp_date( 'w', $ts, $utc ) ];
+            $out = wp_date( 'j', $ts, $utc ) . ' de ' . self::ES_MONTHS[ (int) wp_date( 'n', $ts, $utc ) ];
+            return $with_day ? $day . ', ' . $out : $out;
+        }
+        return wp_date( $with_day ? 'l, F j' : 'F j', $ts, $utc );
+    }
+
+    /**
+     * A clock range in the brand style: "9–10:30 am", "11 am–1 pm", "6 pm", ":00"
+     * dropped, the first am/pm left out when both match. The calendar's own
+     * sfaf_ap_time_range() when it is there, so the chat and the event page agree.
+     * Spanish "a. m." and "p. m.", as the calendar writes them.
+     */
+    public static function clock_label( $start, $end, $lang = 'en' ) {
+        $start = trim( (string) $start );
+        $end   = trim( (string) $end );
+        if ( '' === $start ) {
+            return '';
+        }
+        if ( function_exists( 'sfaf_ap_time_range' ) ) {
+            $s = (string) sfaf_ap_time_range( $start, $end, '', $lang );
+            if ( '' !== $s ) {
+                return self::plain( $s );
+            }
+        }
+        $one = function ( $hm, $meridiem ) use ( $lang ) {
+            if ( ! preg_match( '/^(\d{1,2}):(\d{2})/', $hm, $m ) ) {
+                return '';
+            }
+            $h  = (int) $m[1];
+            $ap = $h >= 12 ? ( 'es' === $lang ? 'p. m.' : 'pm' ) : ( 'es' === $lang ? 'a. m.' : 'am' );
+            $h  = 0 === $h % 12 ? 12 : $h % 12;
+            $c  = '00' === $m[2] ? (string) $h : $h . ':' . $m[2];
+            return $meridiem ? $c . ' ' . $ap : $c;
+        };
+        if ( '' === $end ) {
+            return $one( $start, true );
+        }
+        $same = ( (int) $start >= 12 ) === ( (int) $end >= 12 );
+        return $one( $start, ! $same ) . "\xE2\x80\x93" . $one( $end, true );
+    }
+
+    /**
+     * When one occurrence is, for the list and the card: "Tomorrow, Wednesday,
+     * November 25, 1:30–3:30 pm". Today or Tomorrow (Hoy, Mañana) in front when
+     * it is; a multi-day event "Saturday, December 5 to Sunday, December 6".
+     */
+    public static function display_when( array $s, $lang = 'en', $relative = true ) {
+        $date = (string) ( $s['date'] ?? '' );
+        $out  = self::day_label( $date, $lang );
+        $last = (string) ( $s['last'] ?? '' );
+        if ( preg_match( '/^\d{4}-\d{2}-\d{2}$/', $last ) && $last > $date ) {
+            $out .= ( 'es' === $lang ? ' al ' : ' to ' ) . self::day_label( $last, $lang );
+        }
+        $clock = self::clock_label( $s['start'] ?? '', $s['end'] ?? '', $lang );
+        if ( '' !== $clock ) {
+            $out .= ', ' . $clock;
+        }
+        if ( $relative ) {
+            $tz    = wp_timezone();
+            $today = wp_date( 'Y-m-d', null, $tz );
+            $tmrw  = ( new DateTimeImmutable( 'now', $tz ) )->modify( '+1 day' )->format( 'Y-m-d' );
+            if ( $date === $today ) {
+                $out = ( 'es' === $lang ? 'Hoy, ' : 'Today, ' ) . $out;
+            } elseif ( $date === $tmrw ) {
+                $out = ( 'es' === $lang ? 'Mañana, ' : 'Tomorrow, ' ) . $out;
+            }
+        }
+        // A line of its own starts with a capital, in Spanish too ("Martes, 1 de diciembre").
+        return mb_strtoupper( mb_substr( $out, 0, 1 ) ) . mb_substr( $out, 1 );
+    }
+
+    /**
+     * The card's one line for a repeating event's later dates (1.32.0): "Also on
+     * December 2, 9 and 16, same time". The month is written once for a run of
+     * dates in it; no Oxford comma. When a later date has another time, each date
+     * carries its own: "Also on December 2, 6–8 pm; December 9, 7–9 pm and
+     * December 16, 6–8 pm". Spanish: "También el 2, 9 y 16 de diciembre, a la
+     * misma hora" (REVIEW:spanish). '' with no later dates.
+     */
+    public static function also_line( array $main, array $later, $lang = 'en' ) {
+        if ( array() === $later ) {
+            return '';
+        }
+        $es    = 'es' === $lang;
+        $and   = $es ? ' y ' : ' and ';
+        $clock = function ( $s ) use ( $lang ) {
+            return self::clock_label( $s['start'] ?? '', $s['end'] ?? '', $lang );
+        };
+        $same = true;
+        foreach ( $later as $s ) {
+            if ( $clock( $s ) !== $clock( $main ) ) {
+                $same = false;
+                break;
+            }
+        }
+        $join = function ( array $items, $sep ) use ( $and ) {
+            $last = array_pop( $items );
+            return array() === $items ? $last : implode( $sep, $items ) . $and . $last;
+        };
+
+        if ( ! $same ) {
+            $items = array();
+            foreach ( $later as $s ) {
+                $c       = $clock( $s );
+                $items[] = self::day_label( $s['date'], $lang, false ) . ( '' !== $c ? ', ' . $c : '' );
+            }
+            return ( $es ? 'También el ' : 'Also on ' ) . $join( $items, '; ' );
+        }
+
+        // Same time: the month once per run of dates in it.
+        $items = array();
+        $n     = count( $later );
+        foreach ( $later as $i => $s ) {
+            // Y-m-d, so the month and day are read straight from the string.
+            $month = (int) substr( $s['date'], 5, 2 );
+            $day   = (string) (int) substr( $s['date'], 8, 2 );
+            $prev  = $i > 0 ? (int) substr( $later[ $i - 1 ]['date'], 5, 2 ) : 0;
+            $next  = $i < $n - 1 ? (int) substr( $later[ $i + 1 ]['date'], 5, 2 ) : 0;
+            if ( $es ) {
+                // Spanish puts the month after the run: "30 de noviembre, 7 y 14 de diciembre".
+                $items[] = $day . ( $next !== $month ? ' de ' . self::ES_MONTHS[ $month ] : '' );
+            } else {
+                $items[] = ( $prev !== $month ? self::day_label( $s['date'], 'en', false ) : $day );
+            }
+        }
+        $tail = '' !== $clock( $main ) ? ( $es ? ', a la misma hora' : ', same time' ) : '';
+        return ( $es ? 'También el ' : 'Also on ' ) . $join( $items, ', ' ) . $tail;
     }
 
     /** The calendar page, for "see all dates" and for every uncertain match. */

@@ -88,6 +88,9 @@ class SFAF_Chat_Endpoint {
     // A reply the model declined (or marked crisis) never links a blog post.
     const POST_DECLINE_FLAGS = array( 'personal_advice', 'out_of_scope', 'crisis' );
 
+    // Events shown under one answer (1.32.0): as many as a window lists, the most sent.
+    const MAX_EVENTS_SHOWN = SFAF_Chat_Events::WINDOW_SENT;
+
     /*
      * PAGES FOR A KIND OF QUESTION (1.19.0). Leadership, board and job questions each
      * have one page that answers them, so when the live question is that kind, the page
@@ -647,9 +650,15 @@ class SFAF_Chat_Endpoint {
             ? self::program_page( (array) ( $live['organizers'] ?? array() ), $core, $index_pages )
             : null;
 
+        // A page about the topic as a whole (1.32.0), found from the calendar labels the
+        // question matched ("World AIDS Day"): the button under a list of several events.
+        $topic_page = array() !== $events
+            ? self::program_page( (array) ( $live['topics'] ?? array() ), $core, $index_pages )
+            : null;
+
         // Every record the model can see, and therefore the ONLY ids it can link to.
         $record_map = array();
-        foreach ( array_merge( $core, $related, $subject_pages, $other_pages, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ), null === $program ? array() : array( $program ) ) as $r ) {
+        foreach ( array_merge( $core, $related, $subject_pages, $other_pages, $posts, $post_titles, $events, $candidates, null === $calendar ? array() : array( $calendar ), null === $program ? array() : array( $program ), null === $topic_page ? array() : array( $topic_page ) ) as $r ) {
             $record_map[ $r['id'] ] = $r;
         }
 
@@ -769,17 +778,18 @@ class SFAF_Chat_Endpoint {
         if ( null !== $program ) {
             $system_instruction .= "\n\n## PROGRAM PAGE\n"
                 . "The events below are run by a program with its own page, which has its fuller calendar. "
-                . "When you list these events, link this page (not a single event, and not the general "
-                . "calendar).\n"
+                . "When every event you show is this program's, link this page; otherwise do not link it. "
+                . "Under a single event the chat names it by itself.\n"
                 . json_encode( array( array_map( array( 'SFAF_Chat_Core', 'no_em_dash' ), array(
                     'id'    => $program['id'],
                     'title' => (string) ( $program['title'] ?? '' ),
                 ) ) ), $enc );
         }
-        // After a list of events (1.30.0): a related page, when one was found, else the calendar.
-        $list_link = null !== $program
-            ? 'link the program page (id "' . $program['id'] . '")'
-            : 'if a page in RELATED PAGES is clearly about the same event or occasion, mention it in a sentence and link it; otherwise ' . $calendar_hint;
+        // Beside several events (1.32.0): a page about the topic as a whole, the program's
+        // page when every event is its, else the calendar. The server holds to this.
+        $list_link = 'a page in RELATED PAGES about the topic as a whole, if there is one (never a page about one program or one event)'
+            . ( null !== $program ? ', or the program page (id "' . $program['id'] . '") when every event you show is that program\'s' : '' )
+            . '; otherwise ' . ( null === $calendar ? 'null' : 'the events calendar (id "' . SFAF_Chat_Events::CALENDAR_ID . '")' );
 
         if ( array() !== $events ) {
             $system_instruction .= "\n\n## UPCOMING EVENTS (live)\n"
@@ -789,10 +799,11 @@ class SFAF_Chat_Endpoint {
                 . "or which is next: the list is already in order, and \"date\" is exactly as the calendar "
                 . "gives it. {$events_note}\n"
                 . "If none of these is clearly what the visitor asked about, do not offer one as if it were; "
-                . "{$calendar_hint} instead. When several are listed, list every one that fits what was asked, "
-                . "not a pick of one, as a bulleted list, one line each (title, date and time, location), in "
-                . "the order given; after the list, {$list_link}. When only one is listed, link "
-                . "it by its id" . ( null !== $program ? ', or the program page' : '' ) . ".\n"
+                . "{$calendar_hint} instead. Otherwise put the id of every one that fits what was asked, not a "
+                . "pick of one, in \"event_ids\", in the order given. The chat shows them below your answer "
+                . "(title, linked, with day and time; one event as a card), so write only one short lead "
+                . "sentence and never list them yourself. For several events, link_id is {$list_link}. For "
+                . "one event, link_id is null.\n"
                 . json_encode( array_map( $for_model, $events ), $enc );
         }
 
@@ -850,6 +861,8 @@ class SFAF_Chat_Endpoint {
                         // For the insights report only (1.23.0): see report_section().
                         'report_team'    => array( 'type' => 'string', 'nullable' => true ),
                         'subcategory'    => array( 'type' => 'string' ),
+                        // The events the chat shows under the answer, in order (1.32.0).
+                        'event_ids'      => array( 'type' => 'array', 'items' => array( 'type' => 'string' ), 'nullable' => true ),
                     ),
                     'required'   => array( 'answer', 'in_scope', 'topic' ),
                 ),
@@ -1009,6 +1022,68 @@ class SFAF_Chat_Endpoint {
             $answer = self::with_harm_reduction_line( $answer );
         }
 
+        /*
+         * EVENTS THE CHAT SHOWS (1.32.0). The model names events by id only. Every
+         * title, address, day and time shown comes from the calendar's own record, so
+         * a title is exactly as entered and every link is the event's real page. One
+         * event is a card whose button is that event; several are a list whose button
+         * is a page about the topic as a whole, else the calendar, never a page about
+         * one program the events are not all part of. Not on a declined reply or a pin.
+         */
+        $shown = array();
+        if ( null === $pin_id && $answered_in_scope && ! in_array( $flag, self::POST_DECLINE_FLAGS, true ) ) {
+            $ids = is_array( $parsed['event_ids'] ?? null ) ? $parsed['event_ids'] : array();
+            if ( array() === $ids && null !== $link_id && 'event' === ( $record_map[ $link_id ]['type'] ?? '' ) ) {
+                $ids = array( $link_id );   // a reply that linked one event the old way
+            }
+            foreach ( $ids as $eid ) {
+                if ( is_string( $eid ) && ! isset( $shown[ $eid ] ) && 'event' === ( $record_map[ $eid ]['type'] ?? '' )
+                    && self::linkable( $record_map, $eid ) ) {
+                    $shown[ $eid ] = $record_map[ $eid ];
+                }
+                if ( count( $shown ) >= self::MAX_EVENTS_SHOWN ) {
+                    break;
+                }
+            }
+        }
+        $lang       = self::looks_spanish( $answer ) ? 'es' : 'en';
+        $events_out = null;
+        $aloud      = '';
+        if ( 1 === count( $shown ) ) {
+            $one     = reset( $shown );
+            $link_id = $one['id'];
+            $card    = self::event_card( $one, $lang, self::event_program( $one, $core, $index_pages, $lang ) );
+            $link    = null;
+        } elseif ( count( $shown ) > 1 ) {
+            $card       = null;
+            $events_out = array();
+            $lines      = array();
+            foreach ( $shown as $r ) {
+                $item         = array(
+                    'title' => SFAF_Chat_Core::no_em_dash( (string) $r['title'] ),
+                    'url'   => (string) $r['url'],
+                    'when'  => SFAF_Chat_Events::display_when( (array) ( $r['sched'] ?? array() ), $lang ),
+                );
+                $events_out[] = $item;
+                $lines[]      = $item['title'] . "\n" . $item['when'];
+            }
+            $aloud = implode( "\n", $lines );
+
+            $button = $topic_page;
+            if ( null === $button && null !== $link_id && isset( $record_map[ $link_id ] )
+                && self::list_page_ok( $record_map[ $link_id ], $shown, $core, $index_pages ) ) {
+                $button = $record_map[ $link_id ];
+            }
+            if ( null === $button ) {
+                $button = $calendar;
+            }
+            $link    = ( null !== $button && preg_match( '#^https://#i', (string) ( $button['url'] ?? '' ) ) ) ? self::link_for( $button ) : null;
+            $link_id = null !== $link ? $button['id'] : null;
+        }
+        if ( is_array( $card ) && 'event' === $card['type'] ) {
+            $aloud = self::card_aloud( $card );
+        }
+
         // Donate button: a donation question, answered. It replaces a plain link to
         // the same page, so the visitor sees one way to give, not two.
         $donate = null;
@@ -1056,6 +1131,10 @@ class SFAF_Chat_Endpoint {
             'answer'   => $answer,
             'link'     => $link,
             'card'     => $card,
+            // Several events, as the chat lists them under the answer (1.32.0).
+            'events'   => $events_out,
+            // What Read aloud says after the answer: the list or the event card, plain.
+            'aloud'    => '' !== $aloud ? $aloud : null,
             'in_scope' => $answered_in_scope,
             'contact'  => $contact,
             'donate'   => $donate,
@@ -1068,7 +1147,9 @@ class SFAF_Chat_Endpoint {
             // Read aloud (1.27.0): a signature over this answer, so /speak voices only
             // what the chat said. Null while no Text-to-Speech key is set. It covers the
             // labels of the reply's buttons too, which /speak names after it (1.29.0).
-            'speech'   => SFAF_Chat_Voice::token( $answer, SFAF_Chat_Voice::buttons( $link, $card, $donate, $contact ) ),
+            // The signed text is the answer and then what "aloud" holds, joined exactly as
+            // widget.js heardText() joins them (1.32.0); keep the two in step.
+            'speech'   => SFAF_Chat_Voice::token( self::heard_text( $answer, $aloud ), SFAF_Chat_Voice::buttons( $link, $card, $donate, $contact ) ),
         ), 200 );
     }
 
@@ -1435,8 +1516,7 @@ class SFAF_Chat_Endpoint {
         $image = $og['image'] ?? ( $r['image'] ?? null );
 
         if ( 'event' === $type ) {
-            $place    = (string) ( ( $r['location_short'] ?? '' ) ?: ( $r['location'] ?? '' ) );
-            $subtitle = trim( implode( ' · ', array_filter( array( (string) ( $r['date'] ?? '' ), $place ) ) ) );
+            return self::event_card( $r, 'en', null );
         } else {
             $subtitle = (string) ( $og['description'] ?? '' );
             if ( mb_strlen( $subtitle ) > 140 ) {
@@ -1447,14 +1527,119 @@ class SFAF_Chat_Endpoint {
         $subtitle = SFAF_Chat_Core::no_em_dash( $subtitle );
 
         return array(
-            'type'      => 'event' === $type ? 'event' : 'article',
+            'type'      => 'article',
             'title'     => SFAF_Chat_Core::no_em_dash( ( $og['title'] ?? null ) ?: ( $r['title'] ?? '' ) ),
             'subtitle'  => '' !== $subtitle ? $subtitle : null,
             // SFAF domains only (sfaf.org, *.sfaf.org, tweaker.org), else no image.
             'image_url' => SFAF_Chat_Core::is_sfaf_url( $image ) ? $image : null,
             'url'       => (string) $r['url'],
-            'cta'       => 'event' === $type ? 'Event details' : 'Read the blog post',
-            'kind'      => 'event' === $type ? 'Event' : self::POST_KIND,
+            'cta'       => 'Read the blog post',
+            'kind'      => self::POST_KIND,
         );
+    }
+
+    /* ============================ EVENTS (1.32.0) ========================= */
+
+    /**
+     * One event as a card, from its calendar record only: the featured image (SFAF
+     * domains only), the title exactly as entered, linked, its next day and time
+     * (Today or Tomorrow in front when it is), its place, one line for its later
+     * dates, and the program it belongs to as a line of text after the card. The
+     * button is the event's own page, labelled with its title. "subtitle" repeats
+     * the day and place for a widget from before 1.32.0, cached for up to 5 minutes.
+     */
+    private static function event_card( array $r, $lang, $program ) {
+        $og    = is_array( $r['og'] ?? null ) ? $r['og'] : array();
+        $image = $og['image'] ?? null;
+        $title = SFAF_Chat_Core::no_em_dash( (string) ( $r['title'] ?? '' ) );
+        $sched = is_array( $r['sched'] ?? null ) ? $r['sched'] : null;
+        $when  = null !== $sched ? SFAF_Chat_Events::display_when( $sched, $lang ) : (string) ( $r['date'] ?? '' );
+        $where = SFAF_Chat_Core::no_em_dash( (string) ( ( $r['location_short'] ?? '' ) ?: ( $r['location'] ?? '' ) ) );
+        $also  = null !== $sched ? SFAF_Chat_Events::also_line( $sched, (array) ( $r['later_sched'] ?? array() ), $lang ) : '';
+
+        return array(
+            'type'      => 'event',
+            'title'     => $title,
+            'subtitle'  => SFAF_Chat_Core::no_em_dash( implode( ' · ', array_filter( array( $when, $where ) ) ) ) ?: null,
+            'image_url' => SFAF_Chat_Core::is_sfaf_url( $image ) ? $image : null,
+            'url'       => (string) $r['url'],
+            'cta'       => $title,
+            'kind'      => 'es' === $lang ? 'Evento' : 'Event',
+            'when'      => '' !== $when ? $when : null,
+            'where'     => '' !== $where ? $where : null,
+            'also'      => '' !== $also ? $also : null,
+            'program'   => $program,
+        );
+    }
+
+    /**
+     * The program a single event belongs to, for one line of text after its card:
+     * {text, label, url}, the label linked. From the event's organizers, through the
+     * same search as the PROGRAM PAGE (program_page()), so the label is the
+     * organizer's own name. null when none of them has a page.
+     * REVIEW:spanish "Forma parte de".
+     */
+    private static function event_program( array $r, array $core, array $pages, $lang ) {
+        foreach ( (array) ( $r['organizers'] ?? array() ) as $name ) {
+            $name = trim( (string) $name );
+            if ( '' === $name || preg_match( '/^(sfaf|san francisco aids foundation)$/i', $name ) ) {
+                continue;
+            }
+            $page = self::program_page( array( $name ), $core, $pages );
+            if ( null !== $page ) {
+                return array(
+                    'before' => 'es' === $lang ? 'Forma parte de ' : 'Part of our ',
+                    'label'  => SFAF_Chat_Core::no_em_dash( $name ),
+                    'url'    => (string) $page['url'],
+                );
+            }
+        }
+        return null;
+    }
+
+    /**
+     * May this page be the button under several events? Not an event or a post, and
+     * not the page of one program unless every event shown is that program's (a
+     * World AIDS Day list is not an Aging Services list because one event is theirs).
+     */
+    private static function list_page_ok( array $page, array $shown, array $core, array $pages ) {
+        if ( in_array( $page['type'] ?? 'page', array( 'event', 'post' ), true ) ) {
+            return false;
+        }
+        $orgs = array();
+        foreach ( $shown as $e ) {
+            foreach ( (array) ( $e['organizers'] ?? array() ) as $o ) {
+                $orgs[ $o ] = ( $orgs[ $o ] ?? 0 ) + 1;
+            }
+        }
+        foreach ( $orgs as $o => $n ) {
+            $pp = self::program_page( array( (string) $o ), $core, $pages );
+            if ( null !== $pp && $pp['id'] === ( $page['id'] ?? '' ) && $n < count( $shown ) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** An event card as Read aloud says it, one thing to a line: no address, no alt text. */
+    private static function card_aloud( array $card ) {
+        $lines = array( (string) $card['title'] );
+        foreach ( array( 'when', 'where', 'also' ) as $k ) {
+            if ( ! empty( $card[ $k ] ) ) {
+                $lines[] = (string) $card[ $k ];
+            }
+        }
+        if ( ! empty( $card['program'] ) ) {
+            $lines[] = $card['program']['before'] . $card['program']['label'] . '.';
+        }
+        return implode( "\n", $lines );
+    }
+
+    /**
+     * What Read aloud says for a reply, before the closing line: the answer, then the
+     * events shown. The same join as heardText() in widget.js; keep the two in step.
+     */
+    public static function heard_text( $answer, $aloud ) {
+        return '' === (string) $aloud ? (string) $answer : (string) $answer . "\n\n" . (string) $aloud;
     }
 }

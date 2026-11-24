@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.31.0
+Stable tag: 1.32.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,28 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.32.0 =
+* Events are shown by the chat, not written by the model. The model names the events
+  that fit by id ("event_ids"); every title, link, day and time comes from the calendar,
+  so titles are exactly as entered and each event links to its own calendar page.
+* Several events: one short lead line, then a compact list inside the reply: the title
+  in bold, linked, and the day and time under it ("Tuesday, December 1, 9–10:30 am"). No
+  year, no ordinals, no ":00", the first am/pm left out when both match. No location, no
+  bullets. A repeating event shows its next date only.
+* One event: a card with the event's image (alt text is the title), the linked title,
+  the next day and time with Today or Tomorrow in front when it applies, the place, one
+  "Also on December 2, 9 and 16, same time" line for a repeating event, and the program
+  it belongs to as a line of text after the card ("Part of our Elizabeth Taylor 50-Plus
+  Network.").
+* The yellow button: for one event, that event's page, named by its title. For several,
+  a page about the topic as a whole when one is found (World AIDS Day), else the events
+  calendar from the calendar's own settings. Never the page of one program the events
+  aren't all part of (the World AIDS Day list no longer links Aging Services).
+* Spanish replies get Spanish days and times; titles stay as entered. Read aloud reads
+  the list or the card after the answer: titles, days, times, places, never an address
+  or the image's alt text.
+* The reply gains "events" and "aloud"; the model's reply schema gains "event_ids".
 
 = 1.31.0 =
 * An alert with no last day now shows on its first day only, and ends at midnight

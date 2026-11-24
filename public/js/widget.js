@@ -430,6 +430,28 @@
     '#sfaf-chat .sfaf-card-title{font-weight:600;font-size:16px;color:var(--sfaf-text);}',
     '#sfaf-chat .sfaf-card-sub{color:var(--sfaf-muted);font-size:13.5px;margin-top:4px;}',
     '#sfaf-chat .sfaf-card-cta{margin-top:12px;}',
+    /*
+     * Events (1.32.0). Several: a compact list inside the reply, each title linked and
+     * bold with its day and time under it, no bullets, a little space between. One: a
+     * card with the event's image, its linked title, day and time, place and later
+     * dates, the yellow button to its page, and its program as a line after the card.
+     */
+    '#sfaf-chat .sfaf-evlist{margin:10px 0 0;padding:0;list-style:none;}',
+    '#sfaf-chat .sfaf-evlist .sfaf-ev{margin:0;padding:0;}',
+    '#sfaf-chat .sfaf-evlist .sfaf-ev+.sfaf-ev{margin-top:10px;}',
+    '#sfaf-chat a.sfaf-ev-title{color:inherit;font-weight:700;text-decoration:underline;',
+    '  text-underline-offset:2px;text-decoration-thickness:1px;overflow-wrap:anywhere;}',
+    '#sfaf-chat a.sfaf-ev-title:hover{text-decoration-thickness:2px;}',
+    '#sfaf-chat a.sfaf-ev-title:focus-visible{outline:2px solid var(--sfaf-focus);outline-offset:2px;}',
+    '#sfaf-chat .sfaf-ev-when{display:block;font-size:14px;margin-top:1px;}',
+    '#sfaf-chat .sfaf-nowrap{white-space:nowrap;}',
+    '#sfaf-chat .sfaf-evcard .sfaf-card-title{font-size:17px;line-height:1.3;}',
+    '#sfaf-chat .sfaf-evcard .sfaf-ev-when{font-size:14.5px;font-weight:600;color:var(--sfaf-text);margin-top:6px;}',
+    '#sfaf-chat .sfaf-evcard .sfaf-ev-where,#sfaf-chat .sfaf-evcard .sfaf-ev-also{font-size:14px;color:var(--sfaf-muted);margin-top:2px;}',
+    '#sfaf-chat .sfaf-ev-after{align-self:flex-start;max-width:84%;font-size:14px;color:var(--sfaf-text);',
+    '  margin-top:-2px;animation:sfaf-rise .34s var(--sfaf-ease) .06s both;}',
+    '#sfaf-chat .sfaf-ev-after a{color:inherit;font-weight:700;text-decoration:underline;text-underline-offset:2px;}',
+    '#sfaf-chat .sfaf-ev-after a:focus-visible{outline:2px solid var(--sfaf-focus);outline-offset:2px;}',
 
     // Typing indicator: three square marks passing a slow beat along the row.
     '#sfaf-chat .sfaf-typing{display:inline-flex;gap:5px;align-items:center;height:47px;padding:0 16px;}',
@@ -1061,8 +1083,107 @@
     return String(label);
   }
 
+  // An event's own page from the server: https on an allowed host, else null.
+  function eventUrl(url) {
+    return typeof url === 'string' && isHttps(url) ? ourUrl(url) : null;
+  }
+
+  // "Tuesday, December 1, 9–10:30 am" with the clock after the last comma kept on one
+  // line, so a phone never breaks "1:30–" from "3:30 pm".
+  function whenLine(cls, text) {
+    var d = el('span', cls);
+    var cut = text.lastIndexOf(', ');
+    if (cut > 0 && /\d/.test(text.slice(cut))) {
+      d.appendChild(document.createTextNode(text.slice(0, cut + 2)));
+      d.appendChild(el('span', 'sfaf-nowrap', text.slice(cut + 2)));
+    } else {
+      d.textContent = text;
+    }
+    return d;
+  }
+
+  // An event title linked to its page, opening in a new tab; tracked as a calendar visit.
+  function eventTitleLink(title, url, cls) {
+    var a = el('a', cls, title);
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.setAttribute('data-sfaf-kind', 'event');
+    return a;
+  }
+
+  // Several events (1.32.0), inside the reply's bubble: title linked and bold, then the
+  // day and time, exactly as the server wrote them. No bullets.
+  function addEvents(bubble, list) {
+    if (!bubble || !Array.isArray(list)) return;
+    var ul = el('ul', 'sfaf-evlist');
+    list.forEach(function (e) {
+      var url = e && typeof e.title === 'string' ? eventUrl(e.url) : null;
+      if (!url) return;
+      var li = el('li', 'sfaf-ev');
+      li.appendChild(eventTitleLink(e.title, url, 'sfaf-ev-title'));
+      if (typeof e.when === 'string' && e.when) li.appendChild(whenLine('sfaf-ev-when', e.when));
+      ul.appendChild(li);
+    });
+    if (ul.firstChild) bubble.appendChild(ul);
+    scrollDown();
+  }
+
+  // One event (1.32.0): its image (alt = the title), the title linked, day and time,
+  // place, later dates, and the yellow button to its page named by the title. The
+  // program it belongs to follows as a line of text, linked, never as a button.
+  function addEventCard(card) {
+    var url = eventUrl(card.url);
+    if (!url) return '';
+    var c = el('div', 'sfaf-card sfaf-evcard');
+    if (card.image_url && isSfafUrl(card.image_url)) {
+      var img = el('img');
+      img.src = card.image_url;
+      img.alt = card.title || '';
+      img.loading = 'lazy';
+      img.referrerPolicy = 'no-referrer';
+      img.onerror = function () { img.remove(); };
+      c.appendChild(img);
+    }
+    var body = el('div', 'sfaf-card-body');
+    var title = el('div', 'sfaf-card-title');
+    title.appendChild(eventTitleLink(card.title || '', url, 'sfaf-ev-title'));
+    body.appendChild(title);
+    ['when', 'where', 'also'].forEach(function (k) {
+      if (typeof card[k] !== 'string' || !card[k]) return;
+      body.appendChild(k === 'when' ? whenLine('sfaf-ev-when', card[k]) : el('div', 'sfaf-ev-' + k, card[k]));
+    });
+    var cta = el('a', 'sfaf-card-cta');
+    var label = card.cta || card.title || 'Event details';
+    markFlow(cta, label);
+    cta.href = url;
+    cta.setAttribute('data-sfaf-kind', 'event');
+    cta.target = '_blank';
+    cta.rel = 'noopener';
+    body.appendChild(cta);
+    c.appendChild(body);
+    messages.appendChild(c);
+
+    var p = card.program;
+    var purl = p && typeof p.label === 'string' && p.label ? eventUrl(p.url) : null;
+    if (purl) {
+      var after = el('div', 'sfaf-ev-after');
+      after.appendChild(document.createTextNode(typeof p.before === 'string' ? p.before : ''));
+      var a = el('a', null, p.label);
+      a.href = purl;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      after.appendChild(a);
+      after.appendChild(document.createTextNode('.'));
+      messages.appendChild(after);
+    }
+    scrollDown();
+    return String(label);
+  }
+
   function addCard(card) {
     if (!card || !isHttps(card.url)) return '';
+    if (card.type === 'event' && typeof card.when === 'string') return addEventCard(card);
     var c = el('div', 'sfaf-card');
 
     // Image only from SFAF domains; otherwise keep the card without it.
@@ -1287,6 +1408,7 @@
       if (e.caution && b.firstChild && b.firstChild.classList && b.firstChild.classList.contains('sfaf-p')) {
         b.firstChild.classList.add('sfaf-caution');
       }
+      if (Array.isArray(e.events)) addEvents(b, e.events);
     }
     else if (e.t === 'success' && typeof e.text === 'string') successBubble(e.text);
     else if (e.t === 'card') addCard(e.card);
@@ -1394,6 +1516,9 @@
             bubble.firstChild.classList.contains('sfaf-p')) {
           bubble.firstChild.classList.add('sfaf-caution');
         }
+        var evList = Array.isArray(data.events) && data.events.length ? data.events : null;
+        if (evList) addEvents(bubble, evList);
+        var aloud = typeof data.aloud === 'string' ? data.aloud : '';
         // The buttons' labels, as shown and in order, for Read aloud's closing line.
         var buttons = [];
         if (data.card) buttons.push(addCard(data.card));
@@ -1416,9 +1541,10 @@
         // Only completed exchanges enter the thread, and what they showed is kept for
         // the next page of this visit (1.29.0).
         thread.push({ role: 'user', text: question });
-        thread.push({ role: 'assistant', text: data.answer });
+        thread.push({ role: 'assistant', text: threadText(data.answer, aloud) });
         record({ t: 'user', text: question });
-        record({ t: 'bot', text: data.answer, caution: data.harm_reduction === true, speech: speech, cat: tag });
+        record({ t: 'bot', text: data.answer, caution: data.harm_reduction === true, speech: speech, cat: tag,
+          events: evList, aloud: aloud });
         if (data.card) record({ t: 'card', card: data.card, cat: tag });
         else if (data.link) record({ t: 'link', link: data.link, cat: tag });
         if (data.donate) record({ t: 'donate', donate: data.donate, cat: tag });
@@ -1427,7 +1553,7 @@
           record({ t: 'contact', label: data.contact.label, team: typeof data.contact.team === 'string' ? data.contact.team : '', cat: tag });
         }
         persist();
-        spokenAnswer(data.answer, speech, buttons);
+        spokenAnswer(heardText(data.answer, aloud), speech, buttons);
       })
       .catch(function () {
         if (mySession !== session) return;
@@ -1725,6 +1851,23 @@
     if (!buttons || !buttons.length) return '';
     var line = (es ? 'Tambi\u00e9n puedes: ' : 'You can also: ') + buttons.join(', ');
     return /[.!?]$/.test(line) ? line : line + '.';
+  }
+
+  /*
+   * What Read aloud says for a reply before that line (1.32.0): the answer, then the
+   * events shown under it, as the server wrote them in "aloud" (titles, days, times,
+   * places; never an address or the image's alt text). The same join as
+   * SFAF_Chat_Endpoint::heard_text(), whose result the speech token signs; keep the
+   * two in step.
+   */
+  function heardText(answer, aloud) {
+    return aloud ? answer + '\n\n' + aloud : answer;
+  }
+
+  // The reply as the thread replays it to the model: the answer, and what was shown
+  // under it, so "where is the first one?" works. The prompt knows this form.
+  function threadText(answer, aloud) {
+    return aloud ? answer + '\n\n[Shown with this reply: ' + aloud.replace(/\n+/g, '; ') + ']' : answer;
   }
 
   function withButtons(text, buttons) {
