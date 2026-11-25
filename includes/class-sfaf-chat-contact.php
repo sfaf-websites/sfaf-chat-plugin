@@ -52,6 +52,8 @@ class SFAF_Chat_Contact {
     const API       = 'https://api.postmarkapp.com/email';
     const LOGO      = 'https://www.sfaf.org/wp-content/uploads/sites/64/2026/03/sfaf-logo.png';
     const MAIN_LINE = '415-487-3000';
+    // 1.35.0: given with the main line whenever the form can't send.
+    const INFO_EMAIL = 'info@sfaf.org';
 
     const MAX_NAME       = 100;
     const MAX_EMAIL      = 200;
@@ -354,14 +356,14 @@ class SFAF_Chat_Contact {
         }
 
         if ( ! self::ready() ) {
-            return self::refuse( 'This form is not available right now. Please call our Main Office at ' . self::MAIN_LINE . '.', 503 );
+            return self::refuse( 'This form is not available right now. Please email us at ' . self::INFO_EMAIL . ' or call our Main Office at ' . self::MAIN_LINE . '.', 503 );
         }
 
         // Site-wide throttle. Counts sends only; it knows nothing about who.
         $rate = get_transient( self::RATE_KEY );
         $rate = is_array( $rate ) ? $rate : array( 'n' => 0 );
         if ( (int) $rate['n'] >= self::RATE_MAX ) {
-            return self::refuse( 'We are getting a lot of requests right now. Please try again in a few minutes, or call ' . self::MAIN_LINE . '.', 429 );
+            return self::refuse( 'We are getting a lot of requests right now. Please try again in a few minutes, email us at ' . self::INFO_EMAIL . ', or call ' . self::MAIN_LINE . '.', 429 );
         }
 
         list( $team, $to, $matched ) = self::resolve( $in['team'] ?? '', $page );
@@ -375,7 +377,7 @@ class SFAF_Chat_Contact {
             'thread'  => $thread,
         ), $to );
         if ( true !== $sent ) {
-            return self::refuse( "Sorry, we couldn't send that just now. Please try again, or call our Main Office at " . self::MAIN_LINE . '.', 502 );
+            return self::refuse( "Sorry, we couldn't send that just now. Please try again, email us at " . self::INFO_EMAIL . ', or call our Main Office at ' . self::MAIN_LINE . '.', 502 );
         }
         set_transient( self::RATE_KEY, array( 'n' => (int) $rate['n'] + 1 ), 10 * MINUTE_IN_SECONDS );
 

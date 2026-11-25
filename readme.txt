@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.34.0
+Stable tag: 1.35.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,21 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.35.0 =
+* The Contact Us page is linked only when a visitor asks for that page itself. Otherwise
+  its details go in the reply as plain text, exactly as on the page (info@sfaf.org, the
+  mailing address, 415-487-3000, @sfaidsfound), and the chat drops the page link if the
+  model picks it, so a reply no longer shows both the page and the contact button.
+* A contact question with no topic ("How do I contact you?") gets the contact button,
+  info@sfaf.org and 415-487-3000, then one optional question about what it's about.
+  Press and donor questions get their own email and phone first.
+* Filing a complaint or grievance, discrimination, being denied services or a rights issue
+  puts the Grievance Form first, and the prompt links it; the contact button may appear
+  too. A general bad experience keeps the 1.33.0 reply. Newsletter questions link the
+  Subscribe page.
+* When the contact form can't be used (off, busy, or the send failed), its message gives
+  info@sfaf.org as well as the main line.
 
 = 1.34.0 =
 * Bullets in replies and in the event list are the chat's own: a small #373433 dot inside

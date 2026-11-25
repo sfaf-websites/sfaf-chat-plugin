@@ -62,6 +62,9 @@
     : 'Hi! How can I help you today?';
   var ERROR_TEXT = "Sorry, I'm having trouble right now. For help, please call SFAF at " +
     PHONE + '.';
+  // The contact form couldn't reach the server (1.35.0): the email and the main line.
+  var CONTACT_ERROR_TEXT = "Sorry, we couldn't send that just now. Please email us at " +
+    'info@sfaf.org or call ' + PHONE + '.';
 
   var VOICE_UNSUPPORTED = "This browser can't turn speech into text. Voice input is " +
     'available in most current versions of Chrome, Edge, and Safari. You can still ' +
@@ -1748,7 +1751,7 @@
         .then(function (data) {
           if (mySession !== session) return;
           if (!data || !data.ok) {
-            status.textContent = (data && typeof data.error === 'string') ? data.error : ERROR_TEXT;
+            status.textContent = (data && typeof data.error === 'string') ? data.error : CONTACT_ERROR_TEXT;
             send.disabled = false;
             flowLabel(send, sendText, 'Send');
             return;
@@ -1767,7 +1770,7 @@
         })
         .catch(function () {
           if (mySession !== session) return;
-          status.textContent = ERROR_TEXT;
+          status.textContent = CONTACT_ERROR_TEXT;
           send.disabled = false;
           flowLabel(send, sendText, 'Send');
         });

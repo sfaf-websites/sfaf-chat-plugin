@@ -129,7 +129,26 @@ class SFAF_Chat_Endpoint {
             'no_posts' => false,
             're'       => '/\b(jobs?|careers?|hiring|employment|open positions?|positions? (open|available)|vacanc(y|ies)|work (for|at) (sfaf|you|the foundation)|empleos?|vacantes?)\b/i',
         ),
+        // 1.35.0: filing a complaint or grievance, discrimination, being denied services,
+        // a rights issue. Not a bare "complaint" or "bad experience": the prompt keeps
+        // those to the acknowledgment and the contact form.
+        'grievance'  => array(
+            'path'     => '/about/contact-us/grievance-form/',
+            'no_posts' => false,
+            're'       => '/\b(grievances?|(file|filing|make|making|submit|submitting|lodge|put in|report|raise)( a| an)?( formal)? complaint|complaint (form|process|procedure)|formal complaint|discriminat\w*|denied (services?|care|treatment)|refused (services?|care|treatment)|(my|patient|participant|civil) rights|queja formal|presentar una queja|poner una queja|discriminaci[oó]n)\b/iu',
+        ),
     );
+
+    /*
+     * CONTACT US PAGE (1.35.0). Never shown as a link or card unless the visitor asks
+     * for that page itself ("Where is your contact page?", "the link to your Contact
+     * Us page"). A general "how do I contact you?" gets the contact form, the email and
+     * the main line in the reply instead, which the prompt asks for; this is the
+     * backstop. Exact path only, so the Grievance Form below it is untouched.
+     */
+    const CONTACT_PAGE_PATH = '/about/contact-us/';
+    const CONTACT_PAGE_ASK  = '/\bcontact(?:[\s-]*us)?\s+(?:page|webpage|web page|link|url)\b|\blink\s+(?:to|for)\s+(?:your\s+|the\s+)?contact\b|\bcontact-us\b|\bp[aá]gina\s+de\s+contacto\b|\benlace\s+(?:a|de)\s+(?:la\s+p[aá]gina\s+de\s+)?contacto\b/iu';
+    const INFO_EMAIL        = 'info@sfaf.org';
 
     /*
      * JOBS (1.19.0). Our Careers page loads its openings from Greenhouse with a script,
@@ -923,9 +942,10 @@ class SFAF_Chat_Endpoint {
         $parsed     = json_decode( (string) $model_text, true );
 
         // Fail soft: the model returned something unparseable. Give a safe, friendly
-        // answer pointing at Contact rather than an error the visitor can't act on.
+        // answer with a way to reach us rather than an error the visitor can't act on.
+        // The email and the main line in the text, not the Contact Us page (1.35.0).
         if ( ! is_array( $parsed ) || ! isset( $parsed['answer'] ) ) {
-            $fallback = "I'm not sure about that one. Please reach out through our Contact page and we'll help.";
+            $fallback = "I'm not sure about that one. Please email us at " . self::INFO_EMAIL . ' or call ' . SFAF_Chat_Contact::MAIN_LINE . " and we'll help.";
             SFAF_Chat_Log::write( array(
                 'question' => $question,
                 'answer'   => $fallback,
@@ -933,7 +953,7 @@ class SFAF_Chat_Endpoint {
                 'topic'    => 'other',
                 'in_scope' => null,
                 'flag'     => 'parse_error',
-                'link'     => 'contact',
+                'link'     => null,
                 'model'    => $model,
                 'attempts' => $attempts,
             ) );
@@ -941,7 +961,7 @@ class SFAF_Chat_Endpoint {
             return new WP_REST_Response( array(
                 'ok'       => true,
                 'answer'   => $fallback,
-                'link'     => isset( $record_map['contact'] ) ? self::link_for( $record_map['contact'] ) : null,
+                'link'     => null,
                 'card'     => null,
                 'in_scope' => false,
             ), 200 );
@@ -1025,6 +1045,16 @@ class SFAF_Chat_Endpoint {
                 $link_id = $pin_link;
                 $link    = self::link_for( $record_map[ $pin_link ] );
             }
+        }
+
+        // CONTACT US PAGE (1.35.0): only when the visitor asked for that page. Pins too:
+        // staff who want it on a pin can word the pin's question to ask for the page.
+        if ( null !== $link_id && isset( $record_map[ $link_id ] )
+            && self::is_sfaf_path( (string) ( $record_map[ $link_id ]['url'] ?? '' ), self::CONTACT_PAGE_PATH )
+            && ! preg_match( self::CONTACT_PAGE_ASK, $question ) ) {
+            $link_id = null;
+            $card    = null;
+            $link    = null;
         }
 
         // The harm reduction label goes first, after any pin, and whatever the flag: it
@@ -1277,6 +1307,8 @@ class SFAF_Chat_Endpoint {
             . "to true and say they can send a message to the team here in the chat, using the button below. "
             . "If the knowledge gives a phone number for that team or service, give it too, as the quickest "
             . "way to reach them; they can choose.\n"
+            . "- Never link our Contact Us page beside the button: the email and phone go in your reply (see "
+            . "\"Reaching us\").\n"
             . "- Don't offer it on an ordinary question you fully answered, and don't set \"wants_person\" "
             . "just because your answer mentions a phone number.\n"
             . "- Never in a crisis reply: that offers 988 and 911 only (see \"Crisis\").\n"
