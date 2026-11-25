@@ -3,7 +3,7 @@ Contributors: sfaf
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.33.0
+Stable tag: 1.34.0
 License: GPLv2 or later
 
 The San Francisco AIDS Foundation website assistant.
@@ -32,6 +32,25 @@ Later releases appear on the Plugins screen as a normal update. To check at once
 use the Check for updates link in the plugin's row.
 
 == Changelog ==
+
+= 1.34.0 =
+* Bullets in replies and in the event list are the chat's own: a small #373433 dot inside
+  the reply box, lined up with its text. A host theme's list styling (sfaf.org drew purple
+  bullets past the box's edge) no longer reaches them.
+* Crisis replies offer only 988 (call or text the Suicide & Crisis Lifeline) and 911 for
+  immediate danger, 988 first. No Main Office or other SFAF number, no link, no contact
+  button. If the model's reply still holds another number, an email or the booking link,
+  the chat shows a fixed 988/911 reply instead (the Spanish one awaits review).
+* A possible recent HIV exposure gets the urgent action first, never a refusal first: PEP
+  can help prevent HIV if started as soon as possible and within 72 hours, call Strut, and
+  if Strut is closed or can't be reached in time, an emergency room or urgent care. Still
+  no assessment or diagnosis. New prompt wording awaiting clinical review.
+* Contact teams take an optional Public name. With one the button reads "Contact" and the
+  name as entered ("Contact Strut"); otherwise "Contact our team". Internal team names are
+  never shown to visitors, in the button or the thank-you. Routing and emails unchanged.
+* Button labels show in capitals only when they are 3 words or fewer and 20 characters or
+  fewer; longer labels show as written. Styling only: the text, Read aloud and screen
+  readers get the label as written.
 
 = 1.33.0 =
 * The launcher's question bubble also sits in the chat header, left of "Ask SFAF". Same

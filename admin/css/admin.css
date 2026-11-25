@@ -75,7 +75,8 @@
 
 /* Contact */
 .sfaf-chat-routes td { vertical-align: top; }
-.sfaf-chat-routes td:first-child { width: 22%; }
+.sfaf-chat-routes td:first-child { width: 18%; }
+.sfaf-chat-routes td:nth-child(2) { width: 16%; }
 .sfaf-chat-routes td:last-child, .sfaf-chat-routes th:last-child { width: 1%; white-space: nowrap; }
 
 /* Suggested questions */

@@ -88,6 +88,18 @@ class SFAF_Chat_Endpoint {
     // A reply the model declined (or marked crisis) never links a blog post.
     const POST_DECLINE_FLAGS = array( 'personal_advice', 'out_of_scope', 'crisis' );
 
+    /*
+     * Crisis replies offer 988 and 911 only (1.34.0). A crisis answer that still holds
+     * any other phone number, an email or the booking link is replaced by this text,
+     * whole: cutting a sentence out of the model's reply could leave it broken.
+     * The Spanish is REVIEW:spanish.
+     */
+    const CRISIS_OTHER_CONTACT = '/(?:\(\d{3}\)\s*|\b\d{3}[\s.\-])\d{3}[\s.\-]\d{4}\b|[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|\]\(#sfaf-appointments\)/i';
+    const CRISIS_FALLBACK      = array(
+        'en' => "I'm really sorry you're going through this, and I'm glad you reached out. Please call or text 988, the Suicide & Crisis Lifeline, any time, day or night. If you're in immediate danger, call 911.",
+        'es' => 'Siento mucho que estés pasando por esto, y me alegra que nos hayas escrito. Llama o envía un mensaje de texto al 988, la Línea de Prevención del Suicidio y Crisis, a cualquier hora del día o de la noche. Si estás en peligro inmediato, llama al 911.',
+    );
+
     // Events shown under one answer (1.32.0): as many as a window lists, the most sent.
     const MAX_EVENTS_SHOWN = SFAF_Chat_Events::WINDOW_SENT;
 
@@ -1018,6 +1030,23 @@ class SFAF_Chat_Endpoint {
         // The harm reduction label goes first, after any pin, and whatever the flag: it
         // says what the content is, it never decides whether the content is shown.
         $harm_reduction = true === ( $parsed['harm_reduction'] ?? null );
+
+        /*
+         * CRISIS (1.34.0): 988 and 911, nothing else. No page link or card (events,
+         * Donate and the contact button are already never offered on one), no label,
+         * and if the model's text still names another number, an email or the booking
+         * link, the fixed crisis reply instead. A pin never reaches here (blocks_pin).
+         */
+        if ( 'crisis' === $flag ) {
+            $card           = null;
+            $link           = null;
+            $link_id        = null;
+            $harm_reduction = false;
+            if ( '' === trim( $answer ) || preg_match( self::CRISIS_OTHER_CONTACT, $answer ) ) {
+                $answer = self::CRISIS_FALLBACK[ self::looks_spanish( $answer . ' ' . $question ) ? 'es' : 'en' ];
+            }
+        }
+
         if ( $harm_reduction ) {
             $answer = self::with_harm_reduction_line( $answer );
         }
@@ -1250,6 +1279,7 @@ class SFAF_Chat_Endpoint {
             . "way to reach them; they can choose.\n"
             . "- Don't offer it on an ordinary question you fully answered, and don't set \"wants_person\" "
             . "just because your answer mentions a phone number.\n"
+            . "- Never in a crisis reply: that offers 988 and 911 only (see \"Crisis\").\n"
             . "- Giving, signing up and volunteering (donating, signing up for an event or a ride such as Cycle "
             . "to Zero, a fundraising event, volunteering): a direct, ready-to-act question (\"How do I donate?\", "
             . "\"How do I sign up for Cycle to Zero?\", \"How do I volunteer?\") gets the way to do it: link the "

@@ -129,6 +129,7 @@
     '  --sfaf-focus-on-dark:#FFD900;',
     '  --sfaf-bot-bg:#ffffff;',
     '  --sfaf-bot-text:#373433;',
+    '  --sfaf-bullet:#373433;',
     '  --sfaf-user-bg:#373433;',
     '  --sfaf-user-text:#ffffff;',
     '  --sfaf-radius:0px;',
@@ -284,9 +285,27 @@
     '#sfaf-chat .sfaf-msg .sfaf-p.sfaf-caution{background:var(--sfaf-caution-bg);border-left:3px solid var(--sfaf-caution-edge);',
     '  color:#373433;padding:6px 10px;font-weight:600;}',
     '#sfaf-chat .sfaf-msg .sfaf-p+.sfaf-p,#sfaf-chat .sfaf-msg .sfaf-list+.sfaf-p{margin-top:8px;}',
-    '#sfaf-chat .sfaf-msg .sfaf-list{margin:6px 0 0;padding-left:20px;white-space:normal;}',
-    '#sfaf-chat .sfaf-msg .sfaf-list li{margin:0;}',
-    '#sfaf-chat .sfaf-msg .sfaf-list li+li{margin-top:3px;}',
+    /*
+     * Lists (1.34.0): our own bullets, inside the bubble and aligned with its text, in
+     * --sfaf-bullet (#373433). Items are blocks, so no browser marker exists, and every
+     * property of the dot is set here, so a host theme's li::before or ::marker (sfaf.org
+     * showed purple bullets hanging past the bubble's edge) can't add to it. The event
+     * list uses the same dot.
+     */
+    '#sfaf-chat .sfaf-msg .sfaf-list,#sfaf-chat .sfaf-msg .sfaf-evlist{list-style:none;margin:6px 0 0;padding:0;white-space:normal;}',
+    '#sfaf-chat .sfaf-msg .sfaf-list>li,#sfaf-chat .sfaf-msg .sfaf-evlist>li{display:block;list-style:none;position:relative;',
+    '  margin:0;padding:0 0 0 18px;text-indent:0;background:none;border:0;}',
+    '#sfaf-chat .sfaf-msg .sfaf-list>li::marker,#sfaf-chat .sfaf-msg .sfaf-evlist>li::marker{content:none;}',
+    '#sfaf-chat .sfaf-msg .sfaf-list>li::after,#sfaf-chat .sfaf-msg .sfaf-evlist>li::after{content:none;display:none;}',
+    '#sfaf-chat .sfaf-msg .sfaf-list>li::before,#sfaf-chat .sfaf-msg .sfaf-evlist>li::before{content:"";display:block;',
+    '  position:absolute;left:4px;top:calc(.75em - 3px);right:auto;bottom:auto;width:6px;height:6px;margin:0;padding:0;',
+    '  border:0;border-radius:50%;background:var(--sfaf-bullet);color:var(--sfaf-bullet);box-shadow:none;',
+    '  transform:none;opacity:1;font-size:inherit;line-height:0;}',
+    '#sfaf-chat .sfaf-msg ol.sfaf-list{counter-reset:sfaf-ol;}',
+    '#sfaf-chat .sfaf-msg ol.sfaf-list>li{counter-increment:sfaf-ol;padding-left:24px;}',
+    '#sfaf-chat .sfaf-msg ol.sfaf-list>li::before{content:counter(sfaf-ol) ".";left:0;top:0;width:auto;height:auto;',
+    '  border-radius:0;background:none;font-weight:600;line-height:inherit;}',
+    '#sfaf-chat .sfaf-msg .sfaf-list>li+li{margin-top:3px;}',
     '#sfaf-chat .sfaf-msg strong{font-weight:600;}',
     '#sfaf-chat .sfaf-bot{align-self:flex-start;background:var(--sfaf-bot-bg);color:var(--sfaf-bot-text);',
     '  border:1px solid var(--sfaf-border);}',
@@ -338,8 +357,11 @@
     '  position:relative;isolation:isolate;overflow:hidden;display:inline-flex;align-items:center;',
     '  min-height:48px;padding:16px 56px 16px 24px;border:0;border-radius:var(--sfaf-radius);cursor:pointer;',
     '  background:var(--sfaf-flow-bg);color:var(--sfaf-flow-ink);box-shadow:var(--sfaf-btn-shadow);text-decoration:none;text-align:left;',
-    '  font-family:var(--sfaf-font);font-weight:700;font-size:16px;line-height:16px;letter-spacing:.8px;',
-    '  text-transform:uppercase;transition:color var(--sfaf-swap) var(--sfaf-soft);}',
+    '  font-family:var(--sfaf-font);font-weight:700;font-size:16px;line-height:16px;letter-spacing:0;',
+    '  text-transform:none;transition:color var(--sfaf-swap) var(--sfaf-soft);}',
+    // Capitals only for a short label (1.34.0): see capsFit(). Styling only, the text
+    // in the page stays as written.
+    '#sfaf-chat .sfaf-flow.sfaf-caps{letter-spacing:.8px;text-transform:uppercase;}',
     '#sfaf-chat .sfaf-flow-dark{--sfaf-flow-bg:var(--sfaf-dark);--sfaf-flow-ink:var(--sfaf-on-dark);',
     '  --sfaf-flow-fill:var(--sfaf-accent);--sfaf-flow-ink-on:var(--sfaf-on-accent);}',
     '#sfaf-chat .sfaf-flow-disc{position:absolute;left:50%;top:50%;z-index:-1;width:24px;height:24px;',
@@ -440,13 +462,12 @@
     '#sfaf-chat .sfaf-card-cta{margin-top:12px;}',
     /*
      * Events (1.32.0). Several: a compact list inside the reply, each title linked and
-     * bold with its day and time under it, no bullets, a little space between. One: a
+     * bold with its day and time under it, a bullet (1.34.0), a little space between. One: a
      * card with the event's image, its linked title, day and time, place and later
      * dates, the yellow button to its page, and its program as a line after the card.
      */
-    '#sfaf-chat .sfaf-evlist{margin:10px 0 0;padding:0;list-style:none;}',
-    '#sfaf-chat .sfaf-evlist .sfaf-ev{margin:0;padding:0;}',
-    '#sfaf-chat .sfaf-evlist .sfaf-ev+.sfaf-ev{margin-top:10px;}',
+    '#sfaf-chat .sfaf-msg .sfaf-evlist{margin-top:10px;}',
+    '#sfaf-chat .sfaf-msg .sfaf-evlist>.sfaf-ev+.sfaf-ev{margin-top:10px;}',
     '#sfaf-chat a.sfaf-ev-title{color:inherit;font-weight:700;text-decoration:underline;',
     '  text-underline-offset:2px;text-decoration-thickness:1px;overflow-wrap:anywhere;}',
     '#sfaf-chat a.sfaf-ev-title:hover{text-decoration-thickness:2px;}',
@@ -620,6 +641,26 @@
   // that comes in (left) and the one that goes out (right). Returns the label, whose
   // text can be changed later without losing the rest. icon: another glyph for the
   // badge, in the same place and motion (the envelope on "Contact our team").
+  /*
+   * Capitals (1.34.0): a button label shows in capitals only when it is 3 words or
+   * fewer AND 20 characters or fewer; any longer label shows exactly as written. Only
+   * a class, so the text in the page never changes. A capitalized button also carries
+   * its label as written in aria-label, so no screen reader hears it as capitals.
+   */
+  function capsFit(label) {
+    var t = String(label == null ? '' : label).replace(/\s+/g, ' ').trim();
+    return t !== '' && t.length <= 20 && t.split(' ').length <= 3;
+  }
+
+  // A flow button's label, set or changed: the text and the capitals rule together.
+  function flowLabel(node, text, labelText) {
+    text.textContent = labelText;
+    var caps = capsFit(labelText);
+    node.classList.toggle('sfaf-caps', caps);
+    if (caps) node.setAttribute('aria-label', String(labelText));
+    else node.removeAttribute('aria-label');
+  }
+
   function markFlow(node, labelText, dark, icon) {
     var glyph = icon || ICON_SEND;
     node.classList.add('sfaf-flow');
@@ -629,11 +670,12 @@
     var inArrow = svg(glyph);
     inArrow.setAttribute('class', 'sfaf-flow-a sfaf-flow-in');
     node.appendChild(inArrow);
-    var text = el('span', 'sfaf-flow-text', labelText);
+    var text = el('span', 'sfaf-flow-text');
     node.appendChild(text);
     var outArrow = svg(glyph);
     outArrow.setAttribute('class', 'sfaf-flow-a sfaf-flow-out');
     node.appendChild(outArrow);
+    flowLabel(node, text, labelText);
     return text;
   }
 
@@ -1129,7 +1171,7 @@
   }
 
   // Several events (1.32.0), inside the reply's bubble: title linked and bold, then the
-  // day and time, exactly as the server wrote them. No bullets.
+  // day and time, exactly as the server wrote them. Bulleted like any list (1.34.0).
   function addEvents(bubble, list) {
     if (!bubble || !Array.isArray(list)) return;
     var ul = el('ul', 'sfaf-evlist');
@@ -1695,7 +1737,7 @@
       }
       status.textContent = '';
       send.disabled = true;
-      sendText.textContent = 'Sending…';
+      flowLabel(send, sendText, 'Sending…');
       fetch(CONTACT_URL, requestOptions({
         name: n, email: m, phone: ph, details: details.input.value.trim(), team: team,
         page: pageAddress(), thread: thread.slice(), website: hpInput.value,
@@ -1708,7 +1750,7 @@
           if (!data || !data.ok) {
             status.textContent = (data && typeof data.error === 'string') ? data.error : ERROR_TEXT;
             send.disabled = false;
-            sendText.textContent = 'Send';
+            flowLabel(send, sendText, 'Send');
             return;
           }
           form.remove();
@@ -1727,7 +1769,7 @@
           if (mySession !== session) return;
           status.textContent = ERROR_TEXT;
           send.disabled = false;
-          sendText.textContent = 'Send';
+          flowLabel(send, sendText, 'Send');
         });
     });
 

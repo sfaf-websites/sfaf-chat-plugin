@@ -120,7 +120,7 @@ class SFAF_Chat_Contact {
             'reply_to_email' => '',
             'default_team'   => 'team',
             'default_emails' => array(),
-            'routes'         => array(),    // teams: [{team, about, patterns[], emails[]}]
+            'routes'         => array(),    // teams: [{team, public_name, about, patterns[], emails[]}]
         );
     }
 
@@ -144,10 +144,34 @@ class SFAF_Chat_Contact {
         return preg_match( '/\bteam$/i', $team ) ? $team : $team . ' team';
     }
 
-    /** "Contact our Programa Latino team". */
+    /** Longest public name a team can have (1.34.0). */
+    const MAX_PUBLIC_NAME = 60;
+
+    /**
+     * What visitors see a team called (1.34.0): its "Public name" exactly as entered,
+     * or '' when it has none or isn't a configured team. Team names are internal and
+     * never reach a visitor.
+     */
+    public static function public_name( $team ) {
+        $want = strtolower( trim( (string) $team ) );
+        if ( '' === $want ) {
+            return '';
+        }
+        foreach ( (array) self::config()['routes'] as $r ) {
+            if ( strtolower( trim( (string) ( $r['team'] ?? '' ) ) ) === $want ) {
+                return trim( (string) ( $r['public_name'] ?? '' ) );
+            }
+        }
+        return '';
+    }
+
+    /**
+     * The button (1.34.0): "Contact " and the team's public name ("Contact Strut"),
+     * else "Contact our team". Never the internal team name.
+     */
     public static function label( $team ) {
-        $phrase = self::team_phrase( $team );
-        return 'Contact our ' . ( '' !== $phrase ? $phrase : 'team' );
+        $public = self::public_name( $team );
+        return '' !== $public ? 'Contact ' . $public : 'Contact our team';
     }
 
     /**
@@ -362,12 +386,13 @@ class SFAF_Chat_Contact {
         // The team has it; the visitor's note is a courtesy, so its failure is not theirs.
         self::send_confirmation( $email );
 
-        return array( 'ok' => true, 'status' => 200, 'message' => self::thanks( $matched ? $team : self::config()['default_team'] ) );
+        return array( 'ok' => true, 'status' => 200, 'message' => self::thanks( $matched ? $team : '' ) );
     }
 
+    /** The visitor's thank-you names the team as the button does (1.34.0), else "our team". */
     private static function thanks( $team ) {
-        $phrase = self::team_phrase( $team );
-        return 'Thanks. We sent your message and this chat to our ' . ( '' !== $phrase ? $phrase : 'team' )
+        $public = self::public_name( $team );
+        return 'Thanks. We sent your message and this chat to ' . ( '' !== $public ? $public : 'our team' )
             . '. Someone will reach out within 1 to 2 business days.';
     }
 

@@ -62,15 +62,18 @@ class SFAF_Chat_Admin_Contact {
         $typed  = array(); // the rows as typed, for the screen after a rejected save
         foreach ( (array) ( $post['routes'] ?? array() ) as $i => $row ) {
             $team     = trim( sanitize_text_field( (string) ( $row['team'] ?? '' ) ) );
+            // Shown to visitors exactly as typed (1.34.0): plain text, trimmed, nothing more.
+            $public   = mb_substr( trim( sanitize_text_field( (string) ( $row['public_name'] ?? '' ) ) ), 0, SFAF_Chat_Contact::MAX_PUBLIC_NAME );
             $about    = trim( sanitize_text_field( (string) ( $row['about'] ?? '' ) ) );
             $patterns = array_values( array_filter( array_map( 'trim', preg_split( '/\r\n|\r|\n/', (string) ( $row['patterns'] ?? '' ) ) ) ) );
             $emails   = SFAF_Chat_Contact::parse_emails( $row['emails'] ?? '', $bad_row );
-            if ( '' === $team && '' === $about && array() === $patterns && array() === $emails && array() === $bad_row ) {
+            if ( '' === $team && '' === $public && '' === $about && array() === $patterns && array() === $emails && array() === $bad_row ) {
                 continue; // an empty row
             }
             $typed[] = array(
-                'team'     => mb_substr( $team, 0, 60 ),
-                'about'    => mb_substr( $about, 0, SFAF_Chat_Contact::MAX_ABOUT ),
+                'team'        => mb_substr( $team, 0, 60 ),
+                'public_name' => $public,
+                'about'       => mb_substr( $about, 0, SFAF_Chat_Contact::MAX_ABOUT ),
                 'patterns' => array_slice( $patterns, 0, 20 ),
                 'emails'   => array( mb_substr( trim( (string) ( $row['emails'] ?? '' ) ), 0, 2000 ) ),
             );
@@ -89,7 +92,7 @@ class SFAF_Chat_Admin_Contact {
                     $errors[] = 'Team ' . $n . ': "' . $p . '" ' . $problem . '.';
                 }
             }
-            $routes[] = array( 'team' => mb_substr( $team, 0, 60 ), 'about' => mb_substr( $about, 0, SFAF_Chat_Contact::MAX_ABOUT ), 'patterns' => array_slice( $patterns, 0, 20 ), 'emails' => $emails );
+            $routes[] = array( 'team' => mb_substr( $team, 0, 60 ), 'public_name' => $public, 'about' => mb_substr( $about, 0, SFAF_Chat_Contact::MAX_ABOUT ), 'patterns' => array_slice( $patterns, 0, 20 ), 'emails' => $emails );
         }
         if ( count( $routes ) > SFAF_Chat_Contact::MAX_ROUTES ) {
             $errors[] = 'At most ' . SFAF_Chat_Contact::MAX_ROUTES . ' teams.';
@@ -151,6 +154,7 @@ class SFAF_Chat_Admin_Contact {
         ?>
         <tr data-team>
             <td><input type="text" name="<?php echo esc_attr( $base ); ?>[team]" class="regular-text" placeholder="Stonewall Project" value="<?php echo esc_attr( (string) ( $r['team'] ?? '' ) ); ?>" aria-label="Team name"></td>
+            <td><input type="text" name="<?php echo esc_attr( $base ); ?>[public_name]" class="regular-text" maxlength="<?php echo (int) SFAF_Chat_Contact::MAX_PUBLIC_NAME; ?>" placeholder="Strut" value="<?php echo esc_attr( (string) ( $r['public_name'] ?? '' ) ); ?>" aria-label="Public name (optional)"></td>
             <td><textarea name="<?php echo esc_attr( $base ); ?>[about]" rows="2" class="large-text" placeholder="Substance use counseling for queer men and trans people" aria-label="What they handle"><?php echo esc_textarea( (string) ( $r['about'] ?? '' ) ); ?></textarea></td>
             <td><textarea name="<?php echo esc_attr( $base ); ?>[emails]" rows="2" class="large-text" spellcheck="false" placeholder="Default recipients" aria-label="Recipients (optional)"><?php echo esc_textarea( implode( "\n", (array) ( $r['emails'] ?? array() ) ) ); ?></textarea></td>
             <td><textarea name="<?php echo esc_attr( $base ); ?>[patterns]" rows="2" class="large-text code" spellcheck="false" placeholder="/support-services/the-stonewall-project/*" aria-label="Pages, one per line (optional)"><?php echo esc_textarea( implode( "\n", (array) ( $r['patterns'] ?? array() ) ) ); ?></textarea></td>
@@ -176,7 +180,7 @@ class SFAF_Chat_Admin_Contact {
             <?php $this->admin->tabs( self::PAGE ); ?>
             <?php $this->admin->show_notice(); ?>
 
-            <p>When someone wants to reach a person, the chat offers a <strong>Contact our team</strong> button, beside any phone number it gives. The visitor gives a name, an email and, if they like, a phone number and a note, and is told someone will reach out within 1 to 2 business days. The request, with the chat, is emailed to the team that handles the subject of their question, and the visitor gets a short confirmation email. No copy of a request is kept here.</p>
+            <p>When someone wants to reach a person, the chat offers a <strong>Contact our team</strong> button (or "Contact" and the team's public name), beside any phone number it gives. The visitor gives a name, an email and, if they like, a phone number and a note, and is told someone will reach out within 1 to 2 business days. The request, with the chat, is emailed to the team that handles the subject of their question, and the visitor gets a short confirmation email. No copy of a request is kept here.</p>
             <p>Status: <strong><?php echo SFAF_Chat_Contact::ready() ? 'Offered in the chat' : 'Not offered yet'; ?></strong><?php echo SFAF_Chat_Contact::ready() ? '' : ' (it needs to be switched on, a Postmark token and a default recipient).'; ?></p>
 
             <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" autocomplete="off">
@@ -204,7 +208,7 @@ class SFAF_Chat_Admin_Contact {
                     <tr>
                         <th scope="row"><label for="sfaf-chat-default-team">Default team</label></th>
                         <td><input type="text" id="sfaf-chat-default-team" name="default_team" class="regular-text" value="<?php echo esc_attr( (string) $c['default_team'] ); ?>">
-                            <p class="description">The button reads "Contact our" and then this, e.g. "team" or "client services team".</p></td>
+                            <p class="description">Names requests that no team below fits, in the team's email only. Visitors see "Contact our team".</p></td>
                     </tr>
                     <tr>
                         <th scope="row"><label for="sfaf-chat-default-emails">Default recipients</label></th>
@@ -214,9 +218,9 @@ class SFAF_Chat_Admin_Contact {
                 </table>
 
                 <h2>Teams</h2>
-                <p>The chat picks the team from what the question is about, not the page it was asked on: someone on the home page asking about the Stonewall Project goes to that team. It reads each team's name and <strong>What they handle</strong>, so say plainly what they cover. <strong>Recipients</strong> are optional: a team without any sends to the default recipients, so you can list every team now and add addresses later. <strong>Pages</strong> are optional, a fallback when the chat names no team; write them as on the Suggested Questions screen (<code>/strut</code>, <code>/support-services/latine-health/*</code>). Anything else goes to the default recipients. The button reads "Contact our" and the team's name, with "team" added if it isn't there. Add as many teams as you need, up to <?php echo (int) SFAF_Chat_Contact::MAX_ROUTES; ?>. Nothing changes until you save.</p>
+                <p>The chat picks the team from what the question is about, not the page it was asked on: someone on the home page asking about the Stonewall Project goes to that team. It reads each team's name and <strong>What they handle</strong>, so say plainly what they cover. <strong>Recipients</strong> are optional: a team without any sends to the default recipients, so you can list every team now and add addresses later. <strong>Pages</strong> are optional, a fallback when the chat names no team; write them as on the Suggested Questions screen (<code>/strut</code>, <code>/support-services/latine-health/*</code>). Anything else goes to the default recipients. <strong>Team name</strong> is internal: it routes the request and labels the team's email, and visitors never see it. <strong>Public name</strong> is optional and is what visitors see: with one, the button reads "Contact" and the public name exactly as you type it ("Strut" gives "Contact Strut", "our communications team" gives "Contact our communications team"). Without one, it reads "Contact our team". Add as many teams as you need, up to <?php echo (int) SFAF_Chat_Contact::MAX_ROUTES; ?>. Nothing changes until you save.</p>
                 <table class="widefat sfaf-chat-routes">
-                    <thead><tr><th scope="col">Team name</th><th scope="col">What they handle</th><th scope="col">Recipients (optional)</th><th scope="col">Pages (optional)</th><th scope="col"><span class="screen-reader-text">Remove</span></th></tr></thead>
+                    <thead><tr><th scope="col">Team name</th><th scope="col">Public name (optional)</th><th scope="col">What they handle</th><th scope="col">Recipients (optional)</th><th scope="col">Pages (optional)</th><th scope="col"><span class="screen-reader-text">Remove</span></th></tr></thead>
                     <tbody id="sfaf-chat-teams" data-max="<?php echo (int) SFAF_Chat_Contact::MAX_ROUTES; ?>">
                         <?php
                         $i = 0;
